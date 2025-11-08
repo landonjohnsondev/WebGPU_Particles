@@ -1,0 +1,1138 @@
+<HTML>
+	<HEAD>
+		<BODY>
+			<canvas id="myCanvas" width="800" height="800"></canvas>
+		</BODY>
+	
+	
+		<script src="./BasicGameObjects.js"></script>
+		<script src="./Models.js"></script>
+		<script src="./Textures.js"></script>
+		<script src="./Parsing.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/3.3.0/math.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.8.1/gl-matrix-min.js"></script>
+
+		<!-- All classes, and WebGPU will be defined (or imported) here -->
+		 <!-- WRITE MAT4 MATRICES DIRECTLY INTO BUFFER, DON'T REORDER -->
+		<SCRIPT>				 														  
+			
+			function FrameUpdate()
+			{				
+				GPU.UpdateAll();
+				GPU.RenderAll();
+				requestAnimationFrame(FrameUpdate);
+			}
+
+			class PointLight extends Light
+			{
+				constructor()
+				{
+					super();		
+
+					this.pointLightIndex = GPU.numPointLights;
+					GPU.numPointLights++;								
+					GPU.device.queue.writeBuffer(GPU.lightBuffer, 12, new Uint32Array([GPU.numPointLights]));
+					
+					this.moveTime = 2.0;
+					this.moveTimer = 2.0;
+					this.curDir = -1;
+					this.moveSpeed = 0.1;
+
+					this.uniformBufferSize = 116;
+					this.uniformBuffer = GPU.device.createBuffer({
+						label: 'uniformBuffer',
+						size: this.uniformBufferSize,
+						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+					});
+				}
+				
+				Update() 
+				{
+					this.ApplySceneGraph();
+
+					if(this.curDir == -1)
+						this.localPos[0] -= this.moveSpeed;
+					else if(this.curDir == 1)
+						this.localPos[0] += this.moveSpeed;
+
+					this.moveTimer -= (1.0/60.0);
+
+					if(this.moveTimer < 0)
+					{
+						this.curDir *= -1;
+						this.moveTimer = this.moveTime;
+					}					
+				}
+
+				Render(pass)
+				{					
+					pass.setBindGroup(0, this.pLightGroup);
+										
+					GPU.device.queue.writeBuffer(GPU.lightBuffer, 4, new Float32Array([this.specularity]));
+					GPU.device.queue.writeBuffer(GPU.lightBuffer, (32 + 32*this.pointLightIndex), new Float32Array(this.pos));
+					GPU.device.queue.writeBuffer(GPU.lightBuffer, (48 + 32*this.pointLightIndex), new Float32Array(this.color));
+
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
+							this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
+							this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
+							this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
+							this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
+						]));					
+						GPU.device.queue.writeBuffer(this.uniformBuffer, 64, new Float32Array(this.rot));
+				}
+			}
+
+			class SpotLight extends Light
+			{
+				constructor()
+				{
+					super();
+					this.spotLightIndex = GPU.numSpotLights;
+					GPU.numSpotLights++;
+					GPU.device.queue.writeBuffer(GPU.lightBuffer, 16, new Uint32Array([GPU.numSpotLights]));
+					this.moveSpeed = 0.01;
+				}
+				
+				Update()
+				{
+					this.ApplySceneGraph();
+					this.transform.doRotations(this.localRot);
+					this.localRot[1] += this.moveSpeed;			
+				}				
+
+				Render(commandPass)
+				{
+					commandPass.setBindGroup(0, this.pLightGroup);
+									
+					GPU.device.queue.writeBuffer(GPU.lightBuffer, 4, new Float32Array([this.specularity]));
+					GPU.device.queue.writeBuffer(GPU.lightBuffer, (352 + 48*this.spotLightIndex), new Float32Array(this.pos));
+					GPU.device.queue.writeBuffer(GPU.lightBuffer, (368 + 48*this.spotLightIndex), new Float32Array(this.transform.forward));
+					GPU.device.queue.writeBuffer(GPU.lightBuffer, (384 + 48*this.spotLightIndex), new Float32Array(this.color));															
+				}
+			}
+
+			class DirectionalLight extends Light
+			{
+				constructor()
+				{
+					super();
+
+					this.dirLightIndex = GPU.numDirLights;
+					GPU.numDirLights++;														
+					GPU.device.queue.writeBuffer(GPU.lightBuffer, 20, new Uint32Array([GPU.numDirLights]));
+
+					this.moveTime = 2.0;
+					this.moveTimer = 2.0;
+					this.curDir = -1;
+					this.moveSpeed = 0.01;
+				}
+				
+				Update()
+				{
+					if(this.curDir == -1)
+						this.localRot[1] -= this.moveSpeed;
+					else if(this.curDir == 1)
+						this.localRot[1] += this.moveSpeed;
+
+					this.moveTimer -= (1.0/60.0);
+
+					if(this.moveTimer < 0)
+					{
+						this.curDir *= -1;
+						this.moveTimer = this.moveTime;
+					}
+					this.transform.doRotations(this.localRot);
+				}
+
+				Render(commandPass)
+				{														
+					commandPass.setBindGroup(0, this.pLightGroup);										
+
+					//GPU.device.queue.writeBuffer(GPU.lightBuffer, 4, new Float32Array([this.specularity]));
+					GPU.device.queue.writeBuffer(GPU.lightBuffer, (832 + 32*this.dirLightIndex), new Float32Array(this.transform.forward));
+					GPU.device.queue.writeBuffer(GPU.lightBuffer, (848 + 32*this.dirLightIndex), new Float32Array([this.color[0], this.color[1], this.color[2], 0.0]));					
+				}
+			}
+
+			class CustomObj extends GameObject
+			{
+				constructor(parserData, rawTexture, normalMap)
+				{
+					super();
+
+					if(parserData != undefined)
+					{						
+						this.vertices = parserData[0];
+						this.indexes = parserData[1];
+
+						//will probably put this in a uniform later
+						this.Ka = parserData[2];
+						this.Ks = parserData[3];
+						this.specularity = parserData[4];									
+					}
+
+					this.vertexBuffer = GPU.device.createBuffer({
+						label: "verticeBuffer",
+						size: this.vertices.byteLength,
+						usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+					});
+					GPU.device.queue.writeBuffer(this.vertexBuffer, /*bufferOffset=*/0, this.vertices);
+					
+					this.indexBuffer = GPU.device.createBuffer({
+						label: "indexBuffer",
+						size: this.indexes.byteLength,
+						usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
+					});
+					GPU.device.queue.writeBuffer(this.indexBuffer, /*bufferOffset=*/0, this.indexes);
+
+					this.specularity = 1;
+
+					this.uniformBufferSize = 128;
+					this.uniformBuffer = GPU.device.createBuffer({
+						label: 'uniformBuffer',
+						size: this.uniformBufferSize,
+						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+					});
+										
+
+					//use group 0, binding 0 from the diagram
+					this.mainBindGroup = GPU.device.createBindGroup
+					({
+						layout: GPU.pipeline.getBindGroupLayout(0),
+						label: 'customObjMainGroup',
+						entries:
+						[
+							{ binding: 0, resource: { buffer: this.uniformBuffer }},
+							{ binding: 1, resource: { buffer: GPU.lightBuffer}},							
+						],
+					});							
+
+					this.SetupTextures(rawTexture, normalMap);
+					this.textureBindGroup = GPU.device.createBindGroup
+					({
+						layout: GPU.pipeline.getBindGroupLayout(2),
+						label: 'customObjTextureGroup',
+						entries:
+						[																
+							{ binding: 0, resource: this.textureObj.createView() },							
+							{ binding: 1, resource: GPU.sampler },
+							{ binding: 2, resource: this.normalTextureObj.createView() },
+						],
+					});
+				}
+
+				//kinda cursed logic for now, but create dummy texture and dummy normal map if none are provided
+				SetupTextures(rawTexture, normalMap)
+				{															
+					//set usingTexture and usingNormalMap to false until proven true
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 112, new Uint32Array([0]));
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 116, new Uint32Array([0]));					
+						
+					let textureWidth = 1;
+					if(rawTexture != undefined)
+					{
+						textureWidth = Math.sqrt(rawTexture.length/4);						
+						GPU.device.queue.writeBuffer(this.uniformBuffer, 112, new Uint32Array([1]));				
+					}
+					else
+					{
+						rawTexture = new Uint8Array([255, 0, 0, 255]);
+					}
+
+					this.textureObj = GPU.device.createTexture({
+						size: [textureWidth, textureWidth],
+						format: 'rgba8unorm',
+						usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+					});					
+					GPU.device.queue.writeTexture(
+						{texture: this.textureObj},					
+						rawTexture,
+						{bytesPerRow: textureWidth*4},
+						{width: textureWidth, height: textureWidth},
+					);
+									
+					let normalMapWidth = 1;
+					if(normalMap != undefined)
+					{
+						GPU.device.queue.writeBuffer(this.uniformBuffer, 116, new Uint32Array([1]));
+						normalMapWidth = Math.sqrt(normalMap.length/4);
+					}
+					else
+					{
+						normalMap = new Uint8Array([255, 0, 0, 255]);
+					}
+
+					//console.log("normal map width: " + normalMapWidth);
+					this.normalTextureObj = GPU.device.createTexture({
+						size: [normalMapWidth, normalMapWidth],
+						format: 'rgba8unorm',
+						usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+					});					
+					GPU.device.queue.writeTexture(
+						{texture: this.normalTextureObj},
+						normalMap,
+						{bytesPerRow: normalMapWidth*4},
+						{width: normalMapWidth, height: normalMapWidth},
+					);
+				}					
+
+				Update()
+				{	
+					this.ApplySceneGraph();
+				}				
+
+				Render(pass)
+				{
+					pass.setBindGroup(0, this.mainBindGroup);
+					//don't need group(1) here
+					pass.setBindGroup(2, this.textureBindGroup);
+
+					//WebGPU arrays are column-major, so remake the translation matrix accordingly
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
+						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
+						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
+						this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
+						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
+					]));					
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 64, new Float32Array(this.rot));
+															
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array(this.Ka));
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 96, new Float32Array(this.Ks));						
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 108, new Float32Array([this.specularity]));													
+					
+					pass.setVertexBuffer(0, this.vertexBuffer);
+					pass.setIndexBuffer(this.indexBuffer, "uint16");				
+					pass.drawIndexed(this.indexes.length);		
+				}
+			}
+
+			class Camera extends GameObject
+			{
+				constructor()
+				{
+					super();
+					this.camBuff = GPU.device.createBuffer({
+						label: 'camBuffer',
+						size: 32,
+						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+					});
+
+					this.camGroup = GPU.device.createBindGroup({
+						layout: GPU.pipeline.getBindGroupLayout(1),
+						label: 'camera',
+						entries: [
+							{ binding: 0, resource: {buffer: this.camBuff}},
+						],
+					});					
+				}				
+
+				Update()
+				{
+					this.ApplySceneGraph();										
+					this.transform.doRotations(this.rot);
+
+					if(GPU.CheckKey('D'))
+						this.rot[1] += 0.03;
+					if(GPU.CheckKey('A'))
+						this.rot[1] -= 0.03;
+					
+					if(GPU.CheckKey('W'))
+					{
+						this.localPos[0] += this.transform.forward[0] * 0.04;
+						this.localPos[1] += this.transform.forward[1] * 0.04;
+						this.localPos[2] += this.transform.forward[2] * 0.04;
+					}
+					if(GPU.CheckKey('S'))
+					{
+						this.localPos[0] -= this.transform.forward[0] * 0.04;
+						this.localPos[1] -= this.transform.forward[1] * 0.04;
+						this.localPos[2] -= this.transform.forward[2] * 0.04;
+					}
+					if(GPU.CheckKey('Z'))
+					{
+						this.localPos[1] -= 0.04;
+					}
+					if(GPU.CheckKey('X'))
+					{
+						this.localPos[1] += 0.04;
+					}
+				}								
+
+				Render(commandPass)
+				{					
+					commandPass.setBindGroup(1, this.camGroup);
+					GPU.device.queue.writeBuffer(this.camBuff, 0, new Float32Array(this.pos));
+					GPU.device.queue.writeBuffer(this.camBuff, 16, new Float32Array(this.rot));					
+				}
+			}
+
+			//basically the main class
+			class WebGPU
+			{
+				constructor()
+				{				
+					this.isReady = false;
+					this.SetupGPU().then(() => {this.SlowStart();})
+					this.specularity = 50.0;
+					
+					this.Visual = [];
+					this.Solid = [];
+					this.Trigger = [];
+					this.ObjectCounter = 0;			
+					this.prefab;
+
+					this.vertexStride = 18;
+					
+					this.maxPointLights = 10;
+					this.maxDirLights = 10;
+					this.maxSpotLights = 10;
+
+					this.numLights = 0;
+					this.numPointLights = 0;
+					this.numDirLights = 0;
+					this.numSpotLights = 0;
+										
+					this.Keys = [];
+				}
+
+				async SlowStart()
+				{					
+					//you can specify less parameters than the function defines and JS will still run it
+					var camera = this.CreateObject(0, Camera, [3,-3,-2], [0,-0.7,0]);					
+
+					var pointLight;
+					for(let i = 0; i < 3; i++)
+					{												
+						pointLight = this.CreateObject(0, PointLight, [0+i*8,2, 0], [0,0,0]);						
+						pointLight.color = [0.3, 0.3, 0.3];
+						pointLight.specularity = 10;
+
+						// console.log("parse vertices for disco ball");
+						// var result = ParseVertices(window.discoBall, window.discoBallMtl);
+						// var discoBall = GPU.CreateObject(1, CustomObj, [0.0, 0, 0], [0,0,0], result);
+						// discoBall.specularity = 100;
+						// discoBall.SetParent(pointLight);
+						// discoBall.localRot[1] += 1.5;
+					}
+
+					for(let i = 0; i < 3; i++)
+					{
+						var light = this.CreateObject(0, SpotLight, [-5+(i*6),-1.2,0], [0.5,0,0]);
+						light.color = [i/3, 0, 0.5];
+						
+						var result = ParseVertices(window.spotlight, window.spotlightMtl);
+						var spotlight = GPU.CreateObject(1, CustomObj, [i*2, 2, 1.5], [0,0,0], result);
+						spotlight.specularity = 100;
+						spotlight.SetParent(light);
+						spotlight.localScale[0] *= 0.5;
+						spotlight.localScale[1] *= 0.5;
+						spotlight.localScale[2] *= 0.5;				
+					}					
+					var l = this.CreateObject(0, DirectionalLight, [5, 5.0, 0], [0,3,0]);
+					l.color = [0.15,0.15,0.15];
+
+					console.log("parse vertices for ground");
+					var result = ParseVertices(window.ground, window.groundMtl);
+					var ground = GPU.CreateObject(1, CustomObj, [0,-5.5,1.1], [0,0,0], result, window.grassTexture2, window.grassNormals2);
+					ground.localScale = [15,15,15];
+					ground.specularity = 105;
+
+					console.log("parse vertices for house");
+					var result = ParseVertices(window.house, window.houseMtl);
+					var house = GPU.CreateObject(1, CustomObj, [0.2,0.2,0.2], [0,0,0], result, window.woodTexture, window.woodNormals);
+					house.SetParent(ground);
+					house.specularity = 100;
+		
+					//texture shows up on each tree, but nothing else
+					console.log("parse vertices for tree");
+					var result = ParseVertices(window.tree, window.treeMtl);
+					var tree = GPU.CreateObject(1, CustomObj, [0.8,0.25,0], [0,0,0], result, window.treeTexture, window.treeNormals);
+					tree.SetParent(ground);
+					tree.specularity = 100;
+
+					console.log("parse vertices for sphereTree");
+					var result = ParseVertices(window.sphereTree, window.sphereTreeMtl);
+					var sphereTree = GPU.CreateObject(1, CustomObj, [-0.3, 0.19, -0.4], [0,0,0], result, window.treeTexture, window.treeNormals);
+					sphereTree.localScale[0] *= 0.2;
+					sphereTree.localScale[1] *= 0.2;
+					sphereTree.localScale[2] *= 0.2;
+					sphereTree.SetParent(ground);
+					sphereTree.specularity = 100;
+					
+					//would need an array of models or lights or something so shadows are correct
+					console.log("parse vertices for sun");	
+					var result = ParseVertices(window.sun, window.sunMtl);
+					var sun = GPU.CreateObject(1, CustomObj, [0.9, 1, 1], [0,0,0], result);
+					sun.specularity = 100;
+
+					console.log("parse vertices for cube");	
+					var result = ParseVertices(window.cube, window.cubeMtl);
+					var cube = GPU.CreateObject(1, CustomObj, [0.9, -1, 3], [0,0,0], result, window.spiralTexture, window.spiralNormals);
+					cube.specularity = 100;					
+
+					requestAnimationFrame(FrameUpdate);	
+				}
+
+				SetNormalMaps(useNormals)
+				{
+					if(useNormals)
+					{						
+						for(var i in this.Solid)
+							GPU.device.queue.writeBuffer(this.Solid[i].uniformBuffer, 116, new Uint32Array([1]));
+						for(var i in this.Trigger)
+							GPU.device.queue.writeBuffer(this.Trigger[i].uniformBuffer, 116, new Uint32Array([1]));
+					}
+					else
+					{						
+						for(var i in this.Solid)
+							GPU.device.queue.writeBuffer(this.Solid[i].uniformBuffer, 116, new Uint32Array([0]));
+						for(var i in this.Trigger)
+							GPU.device.queue.writeBuffer(this.Trigger[i].uniformBuffer, 116, new Uint32Array([0]));
+					}
+				}				
+				
+				UpdateAll()
+				{
+					for(var i in this.Visual)				
+						this.Visual[i].Update();
+					for(var i in this.Solid)				
+						this.Solid[i].Update();
+					for(var i in this.Trigger)
+						this.Trigger[i].Update();
+				}
+				
+				RenderAll()
+				{										
+					this.encoder = this.device.createCommandEncoder();
+										
+					this.mainPass = this.encoder.beginRenderPass
+					({
+						label: 'mainRenderPass',
+						colorAttachments:
+						[{
+							view: this.context.getCurrentTexture().createView(),
+							loadOp: "clear",
+							clearValue: { r:0.0, g:0.8, b:1, a:1 },
+							storeOp: "store"
+						}],
+						depthStencilAttachment: {
+							view: this.depthTextureView,								
+							depthClearValue: 1.0,
+							depthLoadOp: "clear",
+							depthStoreOp: "store",
+
+							stencilClearValue: 0,
+							stencilLoadOp: 'clear',
+							stencilStoreOp: 'store',
+						},
+					});					
+					this.mainPass.setPipeline(this.pipeline);
+
+					for(var i in this.Visual)						
+						this.Visual[i].Render(this.mainPass);
+					for(var i in this.Solid)					
+						this.Solid[i].Render(this.mainPass);
+					for(var i in this.Trigger)					
+						this.Trigger[i].Render(this.mainPass);
+
+					this.mainPass.end();
+
+					this.mainCommandBuffer = this.encoder.finish();
+					this.device.queue.submit([this.mainCommandBuffer]);
+				}				
+				
+				CreateObject(type, prefab, pos, rot, parserData, texture, normalMap)
+				{			
+					//type 0 = visual
+					//type 1 = solid
+					//type 2 = trigger
+					var temp = new prefab(parserData, texture, normalMap); //Yes this dark sorcery will work.
+					var id = "ID"+this.ObjectCounter;
+					this.ObjectCounter++;
+					temp.id = id;
+					temp.prefab = prefab;
+
+					for(let i = 0; i < 3; i ++)
+					{
+						temp.pos[i] = pos[i];
+						temp.localPos[i] = pos[i];
+						temp.rot[i] = rot[i];
+						temp.localRot[i] = rot[i];
+					}										
+
+					switch(type)
+					{
+						case 0:
+							this.Visual[id] = temp;
+						break;
+						case 1:
+							this.Solid[id] = temp;
+						break;
+						case 2:
+							this.Trigger[id] = temp;
+						break;
+						default:
+						break;
+					}					
+					return temp;
+				}
+				
+				
+				DestroyObject(id)
+				{
+					if(id in this.Visual)
+						delete this.Visual[id];
+					if(id in this.Solid)
+						delete this.Solid[id];
+					if(id in this.Trigger)			
+						delete this.Trigger[id];
+				}
+
+				CheckKey(k)
+				{
+					if(k in this.Keys)					
+						return this.Keys[k];					
+					return false;
+				}
+				
+				KeyDown(event)
+				{
+					this.Keys[String.fromCharCode(event.keyCode)] = true;			
+				}
+				
+				KeyUp(event)
+				{
+					this.Keys[String.fromCharCode(event.keyCode)] = false;
+				}
+				
+				MouseClick(event)
+				{
+					var rect = canvas.getBoundingClientRect();
+					var realX = event.clientX - rect.left;
+					var realY = event.clientY - rect.top;					
+					var x = -1 + 2*realX/myCanvas.width;
+					var y = -1 + 2*(myCanvas.height - realY)/myCanvas.height;
+					//console.log(realX+","+realY);
+					//console.log("The click occurred on "+x+","+y);
+				}				
+								
+				static keyD(event)
+				{
+					GPU.KeyDown(event);
+				}
+				static keyU(event)
+				{
+					GPU.KeyUp(event);
+				}
+
+				static mouseH(event)
+				{
+					GPU.MouseClick(event);
+				}																
+							
+				async SetupGPU()
+				{			
+					this.adapter = await navigator.gpu.requestAdapter(); 
+					if (!this.adapter)
+					{	
+						throw new Error("No appropriate GPUAdapter found.");
+					}
+					
+					this.device = await this.adapter.requestDevice(); 
+					if (!this.device)
+					{
+						fail('need a browser that supports WebGPU'); 
+						return;					
+					}
+					console.log("WebGPU device found!");
+					
+					this.canvas = document.querySelector('canvas');
+					this.context = this.canvas.getContext('webgpu');
+					this.presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+					this.context.configure
+					(
+						{
+							device: this.device,
+							format: this.presentationFormat,
+						}
+					);
+					console.log("Created context with device and format");
+					
+					this.cellShaderModule = this.device.createShaderModule
+					({
+						label: "mainModule",						
+						code: `												
+						struct Uniforms
+						{
+							matrix: mat4x4<f32>, //offset 0
+							rotation: vec3f, //offset 64
+							
+							Ka: vec3f, //offset 80
+							Ks: vec3f, //offset 96
+							shiny: f32, //offset 112
+							
+							//essentially just bool variables
+							usingTexture: u32, 
+							usingNormalMaps: u32,
+						};						
+						@group(0) @binding(0) var<uniform> uni: Uniforms;				
+
+						struct VertexOutput
+						{
+							@builtin(position) position: vec4f,			
+							@location(0) color: vec3f,	
+							@location(1) texCoords: vec2f, //instead of 
+							@location(2) normal: vec4f,
+							@location(3) Ka: vec3f,
+							@location(4) Ks: vec3f,
+							@location(5) shiny: f32,
+							@location(6) worldSpace: vec3f, //for point light?
+							@location(7) vectorToCam: vec3f, //for specularity										
+						};				
+
+						struct PointLight
+						{
+							position: vec4f,
+							color: vec4f,
+						}
+
+						struct SpotLight
+						{
+							position: vec4f,
+							direction: vec3f,
+							color: vec3f, //or intensity
+						}
+
+						struct DirLight
+						{
+							direction: vec3f,
+							color: vec4f,
+						}
+
+						struct ComplexLightSystem
+						{							
+							ambient: f32, //occupies 4 bytes
+							shiny: f32, //offset 4
+							
+							numLights: u32, //offset 8
+							numPointLights: u32, //offset 12
+							numSpotLights: u32, //offset 16
+							numDirLights: u32, //offset 20
+
+							pointLights: array<PointLight,10>, //offset 32, //336 = 32*10 + 16
+							spotLights: array<SpotLight,10>, //offset 352
+							dirLights: array<DirLight,10>, //offset 832
+						}
+						@group(0) @binding(1) var<uniform> lightSystem: ComplexLightSystem;						
+
+						struct CameraInfo
+						{
+							translation: vec3f,
+							rotation: vec3f,
+						}
+						@group(1) @binding(0) var<uniform> myCam: CameraInfo;
+
+						@group(2) @binding(0) var texture: texture_2d<f32>;
+						@group(2) @binding(1) var textureSampler: sampler;
+						@group(2) @binding(2) var normalMap: texture_2d<f32>; //need this for normal map
+
+						fn MoveCamera(vert: vec4f) -> vec4f
+						{
+							var translationM : mat4x4<f32> = mat4x4<f32>(
+									vec4<f32>(1,0,0,0),
+									vec4<f32>(0,1,0,0),
+									vec4<f32>(0,0,1,0),
+									vec4<f32>(-1.0*myCam.translation.x, -1.0*myCam.translation.y, -1.0*myCam.translation.z, 1)
+								);									
+							
+							//rotate world opposite of camera
+							var c : vec3f = cos(-1.0*myCam.rotation);
+							var s : vec3f = sin(-1.0*myCam.rotation);
+							var rotM : mat4x4<f32> = mat4x4<f32>(
+								vec4<f32>(c.y, 0.0, -s.y, 0.0),
+								vec4<f32>(0.0, 1.0, 0.0, 0.0),
+								vec4<f32>(s.y, 0.0, c.y, 0.0),
+								vec4<f32>(0.0, 0.0, 0.0, 1.0),
+							);
+
+							//make everything orbit around camera
+							return rotM * translationM * vert;
+						}
+
+						fn PerspectiveProjection(vert: vec4f) -> vec4f
+						{
+							var n: f32 = 0.001;
+							var r: f32 = 0.001;
+							var t: f32 = 0.001;
+							var f: f32 = 5000.0;
+
+							//column-major
+							var perspectiveM : mat4x4<f32> = mat4x4<f32>(
+									vec4<f32>(n/r,0,0,0),
+									vec4<f32>(0, n/t, 0,0),
+									vec4<f32>(0,0,(f+n)/(f-n),1),
+									vec4<f32>(0,0,2*f*n/(f-n),1),
+								);
+
+							return perspectiveM * vert;
+						}
+
+						fn reflectVec(I: vec3<f32>, N: vec3<f32>) -> vec3<f32>
+						{
+							return I - 2.0 * dot(N, I) * N;	
+						}
+
+						//blinn phong half vector
+						fn halfVec(L: vec3<f32>, V: vec3<f32>) -> vec3<f32>
+						{
+							return normalize(L + V);
+						}
+
+						//Rotate the object off the euler angle rotations.
+						fn rotate(vert: vec4f) -> vec4f
+						{
+								var c : vec3f = cos(uni.rotation);
+								var s : vec3f = sin(uni.rotation);
+
+								var rotX : mat4x4<f32> = mat4x4<f32>(
+								vec4<f32>( 1.0, 0.0, 0.0, 0.0 ),
+								vec4<f32>( 0.0, c.x, -s.x, 0.0 ),
+								vec4<f32>( 0.0, s.x,  c.x, 0.0 ),
+								vec4<f32>( 0.0, 0.0, 0.0, 1.0 ));
+						
+								var rotY : mat4x4<f32> = mat4x4<f32>(
+								vec4<f32>( c.y, 0.0, -s.y, 0.0 ),
+								vec4<f32>( 0.0, 1.0,  0.0, 0.0 ),
+								vec4<f32>( s.y, 0.0,  c.y, 0.0 ),
+								vec4<f32>( 0.0, 0.0, 0.0, 1.0 ));								
+
+								var rotZ : mat4x4<f32> = mat4x4<f32>(
+								vec4<f32>( c.z, -s.z, 0.0, 0.0 ),
+								vec4<f32>( s.z, c.z,  0.0, 0.0 ),
+								vec4<f32>( 0.0, 0.0,  1.0, 0.0 ),
+								vec4<f32>( 0.0, 0.0, 0.0, 1.0 ));
+								
+								return rotZ * rotY * rotX * vec4f(vert);
+								//return rotY*vec4f(vert);
+						}						
+						
+						//the parameters correspond to the vertexBufferLayout object below
+						//@location(1) uv: color;
+						@vertex						
+						fn vertexMain(@location(0) pos: vec3f, @location(1) col: vec3f, @location(2) texCoords: vec2f, @location(3) normal: vec3f, @location(4) Ka: vec3f, @location(5) Ks: vec3f, @location(6) shiny: f32) -> VertexOutput
+						{
+							var vOutput: VertexOutput;
+							let worldPos4: vec4<f32> = uni.matrix * vec4f(pos, 1.0);
+							let worldPos3: vec3<f32> = worldPos4.xyz;
+
+							vOutput.Ka = Ka;
+							vOutput.Ks = Ks;
+							vOutput.shiny = shiny;																										
+
+							vOutput.worldSpace = worldPos3;
+							vOutput.position = PerspectiveProjection(MoveCamera(worldPos4));
+
+							vOutput.normal = rotate(vec4f(normal, 0.0));
+							vOutput.vectorToCam = myCam.translation - vOutput.worldSpace.xyz;
+														
+							vOutput.color = col;
+							vOutput.texCoords = texCoords;
+							return vOutput;
+						}
+												
+						@fragment
+						fn fragmentMain(fsInput: VertexOutput) -> @location(0) vec4f
+						{		
+							//var AMBIENT_TOTAL = fsInput.color * lightSystem.ambient;		
+							var newNormal: vec3f = fsInput.normal.xyz;
+							var normalizedNormal: vec3f = normalize(fsInput.normal.xyz);
+
+							let dx: vec3f = normalize(dpdx(fsInput.worldSpace));
+							let bitangent: vec3f = normalize(cross(normalizedNormal, dx));
+							let tangent: vec3f = normalize(cross(bitangent, normalizedNormal));
+
+							//read tangent from file or manually calculate tangent?
+							let TBN = mat3x3<f32>(tangent, bitangent, normalizedNormal); //basically a lookat matrix from surface, use vertice normal
+							
+							let normalMapColor: vec3f = textureSample(normalMap, textureSampler, fsInput.texCoords).rgb;
+							let normalTangent: vec3f = normalMapColor * 2.0 - 1.0;
+							var normalWS = normalize(TBN * normalTangent); //old texture example code
+
+							if(uni.usingNormalMaps == 1u)
+							{
+								newNormal = normalWS;
+							}
+							
+							var lightPower: vec3f = vec3<f32>(0,0,0); //summation of all light power
+							var specPower: vec3<f32>; //summation of all specularity light power
+							var dirLight: vec3<f32>; //summation of all directional light power							
+
+							lightPower = vec3(0,0,0);	
+							specPower = vec3(0,0,0);
+							dirLight = vec3(0,0,0);
+
+							var LPos: vec3<f32>; //normalized vector to the light
+							var LPosSafe: vec3<f32>; //make sure lRaw is not 0
+							var IL: f32; //illumination of light
+
+							//for specularity
+							var reflection: vec3<f32>;
+							var halfVector: vec3<f32>;
+							
+							//for spotlight
+							var focus: f32;
+							var direction: vec3<f32> = vec3<f32>(1,-1,1);
+
+							for(var i = 0u; i < min(lightSystem.numPointLights, 10u); i++)
+							{																			
+								var light: PointLight; //specific light instance									
+								light = lightSystem.pointLights[i];									
+
+								//normalizing in vertex shader results in squarish edges
+								LPos = normalize(light.position.xyz - fsInput.worldSpace).xyz;
+								LPosSafe = LPos;
+
+								// L = select(vec3<f32>(0,0,0,0),lRaw,all(lRaw != vec3<f32>(0.0)));
+																
+								//dividing by length gives light falloff, light intensity variable is the coefficient here
+								IL = 5 * max( dot(normalize(newNormal.xyz),LPosSafe), 0.0 ) / (1 + length(light.position.xyz - fsInput.worldSpace));
+								lightPower += light.color.xyz*IL;
+
+								//specularity
+								if(IL > 0.0)
+								{									
+									reflection = reflectVec(-normalize(light.position.xyz - fsInput.worldSpace), normalize(newNormal).xyz);
+									halfVector = halfVec(-LPosSafe, normalize(fsInput.vectorToCam).xyz);
+									specPower += pow(
+														max( dot(normalize(reflection), normalize(fsInput.vectorToCam) ), 0), 
+													uni.shiny) * light.color.xyz;													
+								}
+							}
+
+							var lightingFactor: f32;
+
+							for(var i = 0u; i < min(lightSystem.numSpotLights, 10u); i++)
+							{																											
+								var light: SpotLight; //specific light instance								
+								light = lightSystem.spotLights[i];																						
+
+								focus = dot(normalize(light.position.xyz - fsInput.worldSpace), normalize(-1*light.direction));
+								if(focus >= 0.88)
+								{									
+									lightPower += max(
+														dot(	normalize(newNormal).xyz, 
+																normalize(light.position.xyz - fsInput.worldSpace).xyz), 
+														0.0
+														) * light.color.xyz;
+								}
+							}
+																							
+							for(var i = 0u; i < min(lightSystem.numDirLights, 10u); i++)
+							{																																				
+								var light: DirLight;																	
+								light = lightSystem.dirLights[i];															
+								
+								IL = max( dot(normalize(newNormal.xyz), normalize(light.direction)), 0.0 );
+								dirLight += IL * light.color.xyz;
+							}																								
+
+							var textureUse : f32;
+							textureUse = f32(uni.usingTexture);							
+							if(uni.usingTexture == 1u)
+							{
+								return vec4f(vec4f(uni.Ka.x, uni.Ka.y, uni.Ka.z, 1) * textureSample(texture, textureSampler, fsInput.texCoords) * lightSystem.ambient + vec4f(dirLight + lightPower + specPower, 1));															
+							}
+							else
+							{
+								return vec4f(vec4f(uni.Ka.x, uni.Ka.y, uni.Ka.z, 1) * vec4(fsInput.color, 1) * lightSystem.ambient + vec4f(dirLight + lightPower + specPower, 1));
+							}
+						}`
+					});
+					console.log("Created simple shader");							
+					
+					//BUFFER VARS
+
+					let shadowDepthTextureSize = 1024;
+					this.lightBuffer = GPU.device.createBuffer({
+						label: 'lightBuffer',
+						size: 1152,
+						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+					});
+					this.dummyUniformBuffer = GPU.device.createBuffer({
+						label: 'dummyUniform',
+						size: 112,
+						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+					});										
+					//linear vs point sample distance for textures
+					this.sampler = this.device.createSampler({
+						addressModeU: 'repeat',
+						addressMoveV: 'mirror-repeat',
+						minFilter: 'nearest',
+						maxFilter: 'linear',
+					});															
+
+					//LAYOUT VARS
+
+					this.vertexBufferLayout =					
+					{
+						label: 'mainVertexBufferLayout',
+						arrayStride: GPU.vertexStride*4,
+						attributes:
+						[					
+							//position	
+							{
+								format: "float32x3", 
+								offset:0, 
+								shaderLocation:0,
+							},
+							//color
+							{
+								format: "float32x3", 
+								offset:3*4, 
+								shaderLocation:1,
+							},
+							//texture uv coords
+							{
+								format:"float32x2", 
+								offset:6*4, 
+								shaderLocation:2,
+							},
+							//normal
+							{
+								format:"float32x3",
+								offset:8*4,
+								shaderLocation:3,
+							},
+							//Ka
+							{
+								format:"float32x3",
+								offset:11*4,
+								shaderLocation:4,
+							},
+							//Ks
+							{
+								format:"float32x3",
+								offset:14*4,
+								shaderLocation:5,
+							},
+							//Ns
+							{
+								format:"float32",
+								offset:17*4,
+								shaderLocation:6,
+							},
+						],
+					};										
+
+					this.mainGroupLayout = this.device.createBindGroupLayout
+					({
+						label: 'mainGroupLayout',
+						entries:
+						[
+							{
+								binding: 0, //Uniform
+								visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+								buffer: { type: 'uniform', }, 
+							},
+							{
+								binding: 1, //ComplexLightSystem
+								visibility: GPUShaderStage.FRAGMENT,
+								buffer: { type: 'uniform', } 
+							},							
+						],
+					});
+
+					this.cameraGroupLayout = this.device.createBindGroupLayout
+					({
+						label: 'cameraGroupLayout',
+						entries:
+						[
+							{
+								binding: 0,
+								visibility: GPUShaderStage.VERTEX,
+								buffer: {type: 'uniform', },
+							}
+						]
+					})
+
+					this.textureGroupLayout = this.device.createBindGroupLayout
+					({
+						label: "textureGroupLayout",
+						entries:
+						[
+							{
+								binding: 0, //texture_2d
+								visibility: GPUShaderStage.FRAGMENT,
+								texture: {}, //sampleType: "float"
+							},
+							{
+								binding: 1, //texture sampler
+								visibility: GPUShaderStage.FRAGMENT,
+								sampler: {}, //type: "filtering"
+							},		
+							{
+								binding: 2, //texture sampler
+								visibility: GPUShaderStage.FRAGMENT,
+								texture: {}, //type: "filtering"
+							},
+						],
+					});
+
+					this.mainPipelineLayout = this.device.createPipelineLayout
+					({
+						label: 'mainPipelineLayout',
+						bindGroupLayouts: [ this.mainGroupLayout, this.cameraGroupLayout, this.textureGroupLayout ]
+					});									
+
+					//PIPELINE VARS					
+					
+					this.pipeline = this.device.createRenderPipeline
+					({
+						label: "Main pipeline",
+						layout: this.mainPipelineLayout, //layout: "auto",
+						vertex: 
+						{
+							module: this.cellShaderModule,
+							entryPoint: "vertexMain",
+							buffers: [this.vertexBufferLayout],
+						},
+						fragment:
+						{
+							module: this.cellShaderModule,
+							entryPoint: "fragmentMain",
+							targets: [ {format: this.presentationFormat} ]
+						},
+						primitive:
+						{
+							topology: "triangle-list",	//experiment with rendering points here, change point size
+							cullMode: "none"
+							//topology: "triangle-strip",
+							//stripIndexFormat: "uint16",
+						},						
+						depthStencil: {
+							format: "depth24plus-stencil8",
+							depthWriteEnabled: true,
+							depthCompare: "less",							
+						},						
+					});
+					console.log("Created pipeline");			
+
+					this.depthTexture = this.device.createTexture({
+						label: 'depthTexture',
+						size: [this.canvas.width, this.canvas.height],
+						format: "depth24plus-stencil8",
+						usage: GPUTextureUsage.RENDER_ATTACHMENT,
+					});
+					this.depthTextureView = this.depthTexture.createView();
+				}
+			}							
+			
+			GPU = new WebGPU();
+			var canvas = document.getElementById("myCanvas");			
+			canvas.addEventListener("click", WebGPU.mouseH);
+
+			window.onkeydown = WebGPU.keyD;
+			window.onkeyup = WebGPU.keyU;			
+		</SCRIPT>
+	</HEAD>
+</HTML>

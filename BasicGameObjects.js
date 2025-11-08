@@ -1,0 +1,311 @@
+class Transform
+		{
+			constructor()
+			{
+				this.forward = [0,0,1];
+				this.right = [1,0,0];
+				this.up = [0,1,0];				
+			}
+		
+			doRotations(RotAngles)
+			{
+				this.xRot = [
+							[1,0,0,0],
+							[0,Math.cos(RotAngles[0]),-1*Math.sin(RotAngles[0]),0],
+							[0,Math.sin(RotAngles[0]),Math.cos(RotAngles[0]),0],
+							[0,0,0,1]
+						];		
+				this.yRot = [
+						[Math.cos(RotAngles[1]),0,Math.sin(RotAngles[1]),0],
+						[0,1,0,0],
+						[-1*Math.sin(RotAngles[1]),0,Math.cos(RotAngles[1]),0],
+						[0,0,0,1]	
+						];
+				this.zRot = [
+							[Math.cos(RotAngles[2]),-1*Math.sin(RotAngles[2]),0,0],
+							[Math.sin(RotAngles[2]),Math.cos(RotAngles[2]),0,0],
+							[0,0,1,0],
+							[0,0,0,1]
+						]
+				//this.forward = this.crossMultiply(xRot,[0,0,1,0]);		
+				this.forward = this.crossMultiply(this.zRot,this.crossMultiply(this.yRot,this.crossMultiply(this.xRot,[0,0,1,0])))
+				this.right = this.crossMultiply(this.zRot,this.crossMultiply(this.yRot,this.crossMultiply(this.xRot,[1,0,0,0])))
+				this.up = this.crossMultiply(this.zRot,this.crossMultiply(this.yRot,this.crossMultiply(this.xRot,[0,1,0,0])))
+			}			
+			crossMultiply(M,V)
+			{
+			// console.log(M[0][3]);
+			// console.log(V[3]);
+			var temp = [
+						M[0][0]*V[0]+M[0][1]*V[1]+M[0][2] * V[2]+ M[0][3]*V[3],
+						M[1][0]*V[0]+M[1][1]*V[1]+M[1][2] * V[2]+ M[1][3]*V[3],
+						M[2][0]*V[0]+M[2][1]*V[1]+M[2][2] * V[2]+ M[2][3]*V[3],
+						M[3][0]*V[0]+M[3][1]*V[1]+M[3][2] * V[2]+ M[3][3]*V[3]
+						]
+			//console.log(temp);
+				return temp;
+			}						
+		}
+
+
+class GameObject
+{
+	constructor() 
+	{
+		this.pos = [0,0,0];
+		this.localPos = [0,0,0];
+
+		this.rot = [0,0,0];
+		this.localRot = [0,0,0];
+
+		this.scale = [1,1,1];
+		this.localScale = [1,1,1];
+
+		this.localWorldMatrix = [
+									[1,0,0,0],
+									[0,1,0,0],
+									[0,0,1,0],
+									[0,0,0,1],
+								];
+
+					this.worldMatrix = [
+											[1,0,0,0],
+											[0,1,0,0],
+											[0,0,1,0],
+											[0,0,0,1],
+										];
+
+		this.directChildren = [];
+		this.parent = null;
+
+		this.isTrigger = false;
+		this.collissionRadius = 1.0;
+		this.velocity = [0,0,0];
+		this.angVelocity = [0,0,0];
+		this.name = "default";
+		this.id = 0;
+		this.prefab;
+		this.transform = new Transform();
+	}
+
+	VectorSum(vector1, vector2)
+	{
+		let sum = [];
+		sum.push(vector1[0] + vector2[0]);
+		sum.push(vector1[1] + vector2[1]);
+		sum.push(vector1[2] + vector2[2]);
+		return sum;
+	}
+				
+	Move()
+	{
+		var tempP = [0,0,0]
+		for(var i =0; i< 3;i ++)
+		{
+			tempP[i] = this.loc[i];
+			tempP[i] += this.velocity[i];
+			this.rot[i] += this.angVelocity[i];
+		}
+		if(!this.isTrigger)
+		{
+			var clear = true;
+			for(var so in m.Solid)
+			{
+				if(m.Solid[so] != this)
+				{
+					if(m.CheckCollision(tempP,this.collissionRadius,m.Solid[so].loc,m.Solid[so].collissionRadius))
+					{
+						clear = false;
+						tempP.OnPhysicalHit(m.Solid[so])
+						try
+						{
+							m.Solid[so].OnPhysicalHit(tempP)
+						}
+						catch (error)
+						{
+							//Assume other object has been destroyed
+						}
+					}
+				}
+			} 
+			if(clear)
+			{
+			this.loc = tempP;
+			}
+		}
+		else
+		{
+			this.loc = tempP;
+			for(var so in m.Trigger)
+			{
+				if(m.Trigger[so] != this)
+				{
+					if(m.CheckCollision(tempP,this.collissionRadius,m.Trigger[so].loc,m.Trigger[so].collissionRadius))
+					{
+						tempP.OnTriggerHit(m.Trigger[so])
+						try
+						{
+							m.Trigger[so].OnTriggerHit(tempP)
+						}
+						catch (error)
+						{
+							//Assume other object has been destroyed
+						}
+					}
+				}
+			} 
+		}
+	}
+
+	ApplySceneGraph()
+	{
+		//matrices multiply right to left, so do T*R*S
+		var translateRotate = math.multiply(this.TranslationMatrix(this.localPos), this.RotationMatrix(this.localRot));
+		this.localWorldMatrix = math.multiply(translateRotate, this.ScaleMatrix(this.localScale));
+
+		if(this.parent != null)
+		{
+			this.worldMatrix = math.multiply(this.parent.worldMatrix, this.localWorldMatrix);				
+		}
+		else		
+		{
+			this.worldMatrix = this.localWorldMatrix;
+			this.localPos = [ this.worldMatrix[0][3], this.worldMatrix[1][3], this.worldMatrix[2][3] ];
+		}
+
+		this.pos = [ this.worldMatrix[0][3], this.worldMatrix[1][3], this.worldMatrix[2][3] ];
+	}
+	
+	Update()
+	{
+		console.error(this.name +" update() is NOT IMPLEMENTED!");
+	}
+
+	Render(commandPass)
+	{
+		console.error(this.name + " render() is NOT IMPLEMENTED!");
+	}	
+
+	SetParent(parent)
+	{					
+		this.parent = parent;
+		parent.directChildren.push(this);
+	}
+
+	TranslationMatrix(translation)
+	{																	
+		var translationM = [
+				[1,0,0,translation[0]],
+				[0,1,0,translation[1]],
+				[0,0,1,translation[2]],
+				[0, 0, 0, 1],
+			];
+			return translationM;
+	}
+
+	PrintVertices(vertexes)
+	{					
+		let output = [];
+		for(let i = 0; i < vertexes.length; i++)
+		{
+			output.push(vertexes[i]);										
+			if(output.length == 6)
+			{
+				console.log(output)					
+				output = [];
+			}
+		}
+	}
+
+	RotationMatrix(rotation)
+	{						
+		var c = math.cos(rotation);
+		var s = math.sin(rotation);
+
+		var rotX = [
+				[1.0, 0.0, 0.0, 0.0],
+				[0.0, c[0], -s[0], 0.0],
+				[0.0, s[0], c[0], 0.0],
+				[0.0, 0.0, 0.0, 1.0],
+			];
+
+		var rotY = [
+			[c[1], 0.0, s[1], 0.0],
+			[0.0, 1.0, 0.0, 0.0],
+			[-s[1], 0.0, c[1], 0.0],
+			[0.0, 0.0, 0.0, 1.0],
+		];
+
+		var rotZ = [
+				[c[2], -s[2], 0.0, 0.0],
+				[s[2], c[2], 0.0, 0.0],
+				[0.0, 0.0, 1.0, 0.0],
+				[0.0, 0.0, 0.0, 1.0],
+			];
+	
+		var rotXY = math.multiply(rotX, rotY);						
+		var rotM = math.multiply(rotXY, rotZ);						
+		return rotM;
+	}
+
+	ScaleMatrix(scale)
+	{				
+		var scaleM = [
+				[scale[0], 0.0, 0.0, 0.0],
+				[0.0, scale[1], 0.0, 0.0],
+				[0.0, 0.0, scale[2], 0.0],
+				[0.0, 0.0, 0.0, 1.0],
+			];
+			return scaleM;
+	}
+
+	GetVerticeArray(verticeNum)
+	{
+		let verticeArr = [];
+		for(let i = (verticeNum-1)*6; i < (verticeNum-1)*6 + 6; i++)
+		{
+			verticeArr.push(this.vertices[i]);
+		}
+		return verticeArr;
+	}
+	
+}
+
+class Light extends GameObject
+{
+	constructor()
+	{
+		super();
+		this.pos[3] = 1;
+		this.color = [1, 0.5, 0.5, 1];
+		this.specularity = 50.0;
+		this.ambientLight = 0.65;
+
+		this.spinCenter = [0,0,0];				
+				
+		this.pLightGroup = GPU.device.createBindGroup
+		({
+			layout: GPU.pipeline.getBindGroupLayout(0),
+			label: "spotLight",
+			entries: 
+			[				
+				{ binding: 0, resource: { buffer: GPU.dummyUniformBuffer}},
+				{ binding: 1, resource: { buffer: GPU.lightBuffer}},							
+			],
+		});
+
+		GPU.numLights++;
+		if(GPU.numLights == 1)
+		{
+			//for ComplexLightSystem
+			GPU.device.queue.writeBuffer(GPU.lightBuffer, 0, new Float32Array([this.ambientLight]));
+			GPU.device.queue.writeBuffer(GPU.lightBuffer, 4, new Float32Array([this.specularity]));
+			
+			GPU.device.queue.writeBuffer(GPU.lightBuffer, 20, new Uint8Array(336));
+			GPU.device.queue.writeBuffer(GPU.lightBuffer, 352, new Uint8Array(480));
+			GPU.device.queue.writeBuffer(GPU.lightBuffer, 832, new Uint8Array(320));
+		}
+				
+		GPU.device.queue.writeBuffer(GPU.lightBuffer, 8, new Uint32Array([GPU.numLights]));
+	}	
+}

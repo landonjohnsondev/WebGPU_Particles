@@ -1,0 +1,12 @@
+10min pres. 2-3min for questions. show it running
+
+WebGPU Particles:
+https://webgpu.github.io/webgpu-samples/?sample=particles
+
+Fire:
+https://webgpulab.xbdev.net/index.php?page=editor&id=fire&
+
+Rain: https://github.com/mrdoob/three.js/blob/dev/examples/webgpu_compute_particles_rain.html
+
+Snow:
+https://github.com/mrdoob/three.js/blob/dev/examples/webgpu_compute_particles_snow.html
