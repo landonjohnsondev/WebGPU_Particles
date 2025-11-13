@@ -175,6 +175,61 @@ class GameObject
 
 		this.pos = [ this.worldMatrix[0][3], this.worldMatrix[1][3], this.worldMatrix[2][3] ];
 	}
+
+	//create dummy texture and dummy normal map if none are provided
+	SetupTextures(rawTexture, normalMap)
+	{															
+		//set usingTexture and usingNormalMap to false until proven true
+		GPU.device.queue.writeBuffer(this.uniformBuffer, 112, new Uint32Array([0]));
+		GPU.device.queue.writeBuffer(this.uniformBuffer, 116, new Uint32Array([0]));
+			
+		let textureWidth = 1;
+		if(rawTexture != undefined)
+		{
+			textureWidth = Math.sqrt(rawTexture.length/4);
+			GPU.device.queue.writeBuffer(this.uniformBuffer, 112, new Uint32Array([1]));
+		}
+		else
+		{
+			rawTexture = new Uint8Array([255, 0, 0, 255]);
+		}
+
+		this.textureObj = GPU.device.createTexture({
+			size: [textureWidth, textureWidth],
+			format: 'rgba8unorm',
+			usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+		});
+		GPU.device.queue.writeTexture(
+			{texture: this.textureObj},					
+			rawTexture,
+			{bytesPerRow: textureWidth*4},
+			{width: textureWidth, height: textureWidth},
+		);
+						
+		let normalMapWidth = 1;
+		if(normalMap != undefined)
+		{
+			GPU.device.queue.writeBuffer(this.uniformBuffer, 116, new Uint32Array([1]));
+			normalMapWidth = Math.sqrt(normalMap.length/4);
+		}
+		else
+		{
+			normalMap = new Uint8Array([255, 0, 0, 255]);
+		}
+
+		//console.log("normal map width: " + normalMapWidth);
+		this.normalTextureObj = GPU.device.createTexture({
+			size: [normalMapWidth, normalMapWidth],
+			format: 'rgba8unorm',
+			usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+		});					
+		GPU.device.queue.writeTexture(
+			{texture: this.normalTextureObj},
+			normalMap,
+			{bytesPerRow: normalMapWidth*4},
+			{width: normalMapWidth, height: normalMapWidth},
+		);
+	}					
 	
 	Update()
 	{

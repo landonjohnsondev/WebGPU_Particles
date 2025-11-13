@@ -38,7 +38,7 @@
 					this.curDir = -1;
 					this.moveSpeed = 0.1;
 
-					this.uniformBufferSize = 116;
+					this.uniformBufferSize = 128;
 					this.uniformBuffer = GPU.device.createBuffer({
 						label: 'uniformBuffer',
 						size: this.uniformBufferSize,
@@ -194,8 +194,7 @@
 						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 					});
 										
-
-					//use group 0, binding 0 from the diagram
+					
 					this.mainBindGroup = GPU.device.createBindGroup
 					({
 						layout: GPU.pipeline.getBindGroupLayout(0),
@@ -203,7 +202,7 @@
 						entries:
 						[
 							{ binding: 0, resource: { buffer: this.uniformBuffer }},
-							{ binding: 1, resource: { buffer: GPU.lightBuffer}},							
+							{ binding: 1, resource: { buffer: GPU.lightBuffer}},
 						],
 					});							
 
@@ -219,62 +218,7 @@
 							{ binding: 2, resource: this.normalTextureObj.createView() },
 						],
 					});
-				}
-
-				//kinda cursed logic for now, but create dummy texture and dummy normal map if none are provided
-				SetupTextures(rawTexture, normalMap)
-				{															
-					//set usingTexture and usingNormalMap to false until proven true
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 112, new Uint32Array([0]));
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 116, new Uint32Array([0]));					
-						
-					let textureWidth = 1;
-					if(rawTexture != undefined)
-					{
-						textureWidth = Math.sqrt(rawTexture.length/4);						
-						GPU.device.queue.writeBuffer(this.uniformBuffer, 112, new Uint32Array([1]));				
-					}
-					else
-					{
-						rawTexture = new Uint8Array([255, 0, 0, 255]);
-					}
-
-					this.textureObj = GPU.device.createTexture({
-						size: [textureWidth, textureWidth],
-						format: 'rgba8unorm',
-						usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-					});					
-					GPU.device.queue.writeTexture(
-						{texture: this.textureObj},					
-						rawTexture,
-						{bytesPerRow: textureWidth*4},
-						{width: textureWidth, height: textureWidth},
-					);
-									
-					let normalMapWidth = 1;
-					if(normalMap != undefined)
-					{
-						GPU.device.queue.writeBuffer(this.uniformBuffer, 116, new Uint32Array([1]));
-						normalMapWidth = Math.sqrt(normalMap.length/4);
-					}
-					else
-					{
-						normalMap = new Uint8Array([255, 0, 0, 255]);
-					}
-
-					//console.log("normal map width: " + normalMapWidth);
-					this.normalTextureObj = GPU.device.createTexture({
-						size: [normalMapWidth, normalMapWidth],
-						format: 'rgba8unorm',
-						usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-					});					
-					GPU.device.queue.writeTexture(
-						{texture: this.normalTextureObj},
-						normalMap,
-						{bytesPerRow: normalMapWidth*4},
-						{width: normalMapWidth, height: normalMapWidth},
-					);
-				}					
+				}								
 
 				Update()
 				{	
@@ -298,11 +242,11 @@
 															
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array(this.Ka));
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 96, new Float32Array(this.Ks));						
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 108, new Float32Array([this.specularity]));													
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 108, new Float32Array([this.specularity]));
 					
 					pass.setVertexBuffer(0, this.vertexBuffer);
-					pass.setIndexBuffer(this.indexBuffer, "uint16");				
-					pass.drawIndexed(this.indexes.length);		
+					pass.setIndexBuffer(this.indexBuffer, "uint16");
+					pass.drawIndexed(this.indexes.length);
 				}
 			}
 
@@ -356,13 +300,134 @@
 					{
 						this.localPos[1] += 0.04;
 					}
+
+					//STRAFE CONTROLS
+					//Left key pressed. idk why left key is % with Towle's code
+					if(GPU.CheckKey('%'))
+					{						
+						this.localPos[0] -= 0.04 * this.transform.right[0];
+						this.localPos[1] -= 0.04 * this.transform.right[1];
+						this.localPos[2] -= 0.04 * this.transform.right[2];
+					}
+					//Right key pressed. this is right key apparently
+					if(GPU.CheckKey('\''))
+					{						
+						this.localPos[0] += 0.04 * this.transform.right[0];
+						this.localPos[1] += 0.04 * this.transform.right[1];
+						this.localPos[2] += 0.04 * this.transform.right[2];
+					}
 				}								
 
 				Render(commandPass)
 				{					
 					commandPass.setBindGroup(1, this.camGroup);
 					GPU.device.queue.writeBuffer(this.camBuff, 0, new Float32Array(this.pos));
-					GPU.device.queue.writeBuffer(this.camBuff, 16, new Float32Array(this.rot));					
+					GPU.device.queue.writeBuffer(this.camBuff, 16, new Float32Array(this.rot));				
+				}
+			}
+
+			class Flame extends GameObject
+			{
+				constructor()
+				{
+					super();	
+
+					this.uniformBufferSize = 132;
+					this.uniformBuffer = GPU.device.createBuffer({
+						label: 'uniformBuffer',
+						size: this.uniformBufferSize,
+						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+					});
+
+					//these triangles form a square, which is the area for the fire "texture"
+					this.vertices = new Float32Array([
+						 -0.5,0.5,0, 0,0,0, -1, 1, 0,0,0,0,0,0,0,0,0,0,
+						-0.5,-0.5,0, 0,0,0, -1,-1, 0,0,0,0,0,0,0,0,0,0,
+						  0.5,0.5,0, 0,0,0,  1, 1, 0,0,0,0,0,0,0,0,0,0,
+						 
+						-0.5,-0.5,0, 0,0,0,  1,-1, 0,0,0,0,0,0,0,0,0,0,
+						 0.5,-0.5,0, 0,0,0, -1,-1, 0,0,0,0,0,0,0,0,0,0,
+						  0.5,0.5,0, 0,0,0, -1, 1, 0,0,0,0,0,0,0,0,0,0,
+					]);
+					
+					this.vertexBuffer = GPU.device.createBuffer({
+						label: "verticeBuffer",
+						size: this.vertices.byteLength,
+						usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+					});
+					GPU.device.queue.writeBuffer(this.vertexBuffer, 0, this.vertices);
+
+					this.timer = 0.0;
+					this.flameGroup = GPU.device.createBindGroup
+					({
+						layout: GPU.pipeline.getBindGroupLayout(0),
+						label: "flameGroup",
+						entries:
+						[
+							{ binding: 0, resource: {buffer: this.uniformBuffer}},
+							{ binding: 1, resource: {buffer: GPU.lightBuffer}},
+						],
+					});					
+					
+					//even though fire doesn't use texture bindings, the group needs to be bound since
+					//group(0) interacts with the textures in group(2) in the shader
+					this.SetupTextures(undefined, undefined);
+					this.dummyTextureGroup = GPU.device.createBindGroup
+					({
+						layout: GPU.pipeline.getBindGroupLayout(2),
+						label: 'customObjTextureGroup',
+						entries:
+						[																
+							{ binding: 0, resource: this.textureObj.createView() },							
+							{ binding: 1, resource: GPU.sampler },
+							{ binding: 2, resource: this.normalTextureObj.createView() },
+						],
+					});
+					
+					this.camera = this.GetCamera();
+					
+					//set isFire to true in the shader
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([1]));
+				}												
+				
+				Update()
+				{					
+					this.ApplySceneGraph();
+					this.timer += (1/60);		
+					
+					//console.log("flame timer: " + this.timer);
+
+					//make flame face camera for billboarded effect
+					this.localRot[1] = this.camera.rot[1];	
+					this.transform.doRotations(this.localRot);
+				}
+
+				GetCamera()
+				{
+					for(var i in GPU.Visual)
+					{
+						if(GPU.Visual[i] instanceof Camera)
+							return GPU.Visual[i];
+					}
+				}
+											
+				Render(commandPass)
+				{
+					commandPass.setBindGroup(0, this.flameGroup);
+					commandPass.setBindGroup(2, this.dummyTextureGroup);
+
+					//The reason for the timer issue is that every object uses its own uniform buffer, which sets timer to 0					
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));
+
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
+						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
+						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
+						this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
+						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
+					]));				
+					
+					commandPass.setVertexBuffer(0, this.vertexBuffer);
+					commandPass.draw(6,1,0,0);
 				}
 			}
 
@@ -398,19 +463,20 @@
 				async SlowStart()
 				{					
 					//you can specify less parameters than the function defines and JS will still run it
-					var camera = this.CreateObject(0, Camera, [3,-3,-2], [0,-0.7,0]);					
+					var camera = this.CreateObject(0, Camera, [3,-3,-2], [0,0,0]);					
+					var flame = this.CreateObject(0, Flame, [3,-3,0], [0,0,0]);
 
 					var pointLight;
 					for(let i = 0; i < 3; i++)
 					{												
 						pointLight = this.CreateObject(0, PointLight, [0+i*8,2, 0], [0,0,0]);						
-						pointLight.color = [0.3, 0.3, 0.3];
-						pointLight.specularity = 10;
+						pointLight.color = [0.4, 0.4, 0.4];
+						//changing specularity of pointlight doesn't do anything since it's the light itself						
 
 						// console.log("parse vertices for disco ball");
 						// var result = ParseVertices(window.discoBall, window.discoBallMtl);
 						// var discoBall = GPU.CreateObject(1, CustomObj, [0.0, 0, 0], [0,0,0], result);
-						// discoBall.specularity = 100;
+						// discoBall.specularity = 1000;
 						// discoBall.SetParent(pointLight);
 						// discoBall.localRot[1] += 1.5;
 					}
@@ -426,7 +492,7 @@
 						spotlight.SetParent(light);
 						spotlight.localScale[0] *= 0.5;
 						spotlight.localScale[1] *= 0.5;
-						spotlight.localScale[2] *= 0.5;				
+						spotlight.localScale[2] *= 0.5;
 					}					
 					var l = this.CreateObject(0, DirectionalLight, [5, 5.0, 0], [0,3,0]);
 					l.color = [0.15,0.15,0.15];
@@ -468,13 +534,14 @@
 					console.log("parse vertices for cube");	
 					var result = ParseVertices(window.cube, window.cubeMtl);
 					var cube = GPU.CreateObject(1, CustomObj, [0.9, -1, 3], [0,0,0], result, window.spiralTexture, window.spiralNormals);
-					cube.specularity = 100;					
+					cube.specularity = 100;															
 
-					requestAnimationFrame(FrameUpdate);	
+					requestAnimationFrame(FrameUpdate);
 				}
 
 				SetNormalMaps(useNormals)
 				{
+					console.log("calling set normalmaps: " + useNormals);
 					if(useNormals)
 					{						
 						for(var i in this.Solid)
@@ -489,7 +556,7 @@
 						for(var i in this.Trigger)
 							GPU.device.queue.writeBuffer(this.Trigger[i].uniformBuffer, 116, new Uint32Array([0]));
 					}
-				}				
+				}
 				
 				UpdateAll()
 				{
@@ -590,6 +657,7 @@
 
 				CheckKey(k)
 				{
+					//console.log(Object.getOwnPropertyNames(this.Keys)); // shows all hashmap entries
 					if(k in this.Keys)					
 						return this.Keys[k];					
 					return false;
@@ -674,6 +742,10 @@
 							//essentially just bool variables
 							usingTexture: u32, 
 							usingNormalMaps: u32,
+							
+							//for flame
+							timer: f32, 
+							isFire: u32,
 						};						
 						@group(0) @binding(0) var<uniform> uni: Uniforms;				
 
@@ -687,7 +759,7 @@
 							@location(4) Ks: vec3f,
 							@location(5) shiny: f32,
 							@location(6) worldSpace: vec3f, //for point light?
-							@location(7) vectorToCam: vec3f, //for specularity										
+							@location(7) vectorToCam: vec3f, //for specularity								
 						};				
 
 						struct PointLight
@@ -814,12 +886,74 @@
 								
 								return rotZ * rotY * rotX * vec4f(vert);
 								//return rotY*vec4f(vert);
-						}						
+						}		
+
+
+
+						//FIRE STUFF
+
+						fn noise(pos: vec3<f32>) -> f32
+						{
+							var cell_coord = floor(pos);
+							var hash_seed = dot(cell_coord, vec3<f32>(1.0, 57.0, 21.0)) + vec4<f32>(0.0, 27.0, 21.0, 78.0);
+							var interp = cos((pos - cell_coord) * acos(-1.0)) * -0.5 + 0.5;
+							hash_seed  = mix(sin(cos(hash_seed)*hash_seed), sin(cos(1+hash_seed)*(1+hash_seed)), interp.x);
+							var blended_xy = mix(hash_seed.xz, hash_seed.yw, interp.y);
+							hash_seed.x = blended_xy.x;
+							hash_seed.y = blended_xy.y;
+							return mix(hash_seed.x, hash_seed.y, interp.z);
+						}
+
+						fn sphere(pos: vec3<f32>, spr: vec4<f32>) -> f32
+						{
+							return length(spr.xyz - pos) - spr.w;
+						}
+								
+						fn flame(pos: vec3<f32>) -> f32
+						{							
+							var iTime = uni.timer;
+							var d = sphere(pos*vec3<f32>(1.0, 0.5, 1.0), vec4<f32>(0.0, -1.0, 0.0, 1.0));
+							return d + (noise(pos + vec3<f32>(0.0, iTime * 2.0, 0.0)) + noise(pos * 3.0) * 0.5) * 0.25 * (pos.y);
+						}
+
+						fn scene(pos: vec3<f32>) -> f32
+						{
+							return min(100.0 - length(pos), abs(flame(pos)));
+						}
+
+						fn raymarch(ogPos: vec3<f32>, dir: vec3<f32>) -> vec4<f32>
+						{
+							var d = 0.0;
+							var glow = 0.0;
+							var eps = 0.02;	
+							var pos = ogPos;					
+							var glowed = 0u;
+							
+							for(var i = 0; i < 64; i++)
+							{
+								d = scene(pos) + eps;								
+								pos = pos + d * dir;
+								if(d > eps)
+								{
+									if(flame(pos) < 0.0)
+									{
+										glowed = 1u;
+									}
+																	
+									if(glowed == 1u)
+									{
+										glow = f32(i) / 64.0;
+									}
+								}
+							}
+							return vec4<f32>(pos, glow);
+						}
 						
-						//the parameters correspond to the vertexBufferLayout object below
-						//@location(1) uv: color;
+
+
+						//the parameters correspond to the vertexBufferLayout object below						
 						@vertex						
-						fn vertexMain(@location(0) pos: vec3f, @location(1) col: vec3f, @location(2) texCoords: vec2f, @location(3) normal: vec3f, @location(4) Ka: vec3f, @location(5) Ks: vec3f, @location(6) shiny: f32) -> VertexOutput
+						fn vertexMain(@builtin(vertex_index) vertexIndex: u32, @location(0) pos: vec3f, @location(1) col: vec3f, @location(2) texCoords: vec2f, @location(3) normal: vec3f, @location(4) Ka: vec3f, @location(5) Ks: vec3f, @location(6) shiny: f32) -> VertexOutput
 						{
 							var vOutput: VertexOutput;
 							let worldPos4: vec4<f32> = uni.matrix * vec4f(pos, 1.0);
@@ -837,13 +971,20 @@
 														
 							vOutput.color = col;
 							vOutput.texCoords = texCoords;
+
+							if(uni.isFire == 1u)
+							{								
+								//offset fire texture coords
+								vOutput.texCoords = vOutput.texCoords * 0.5 + 0.5;
+							}
+
 							return vOutput;
 						}
 												
 						@fragment
 						fn fragmentMain(fsInput: VertexOutput) -> @location(0) vec4f
-						{		
-							//var AMBIENT_TOTAL = fsInput.color * lightSystem.ambient;		
+						{	
+							var AMBIENT_TOTAL = fsInput.color * lightSystem.ambient;		
 							var newNormal: vec3f = fsInput.normal.xyz;
 							var normalizedNormal: vec3f = normalize(fsInput.normal.xyz);
 
@@ -861,8 +1002,8 @@
 							if(uni.usingNormalMaps == 1u)
 							{
 								newNormal = normalWS;
-							}
-							
+							}							
+						
 							var lightPower: vec3f = vec3<f32>(0,0,0); //summation of all light power
 							var specPower: vec3<f32>; //summation of all specularity light power
 							var dirLight: vec3<f32>; //summation of all directional light power							
@@ -934,13 +1075,36 @@
 								
 								IL = max( dot(normalize(newNormal.xyz), normalize(light.direction)), 0.0 );
 								dirLight += IL * light.color.xyz;
-							}																								
+							}																
+														
+							if(uni.isFire == 1u)
+							{
+								var v = -1.0 + 2.0 * fsInput.texCoords.xy / 1.0;
+								var org = vec3<f32>(0, -2, 4);
+								var dir = normalize(vec3<f32>(v.x * 1.6, -v.y, -1.5));
+
+								var pos = raymarch(org, dir);
+								var glow = pos.w;
+
+								var col = mix(vec4<f32>(1, 0.5, 0.1, 1), vec4<f32>(0.1, 0.5, 1, 1), pos.y * 0.02 + 0.4);
+								var fragColor = mix(vec4<f32>(0), col, pow(glow*2, 4));
+								fragColor.w = 1.0;								
+								if(glow < 0.05)
+								{
+									discard;
+								}
+								else if(fragColor.x < 0.9 && fragColor.y < 0.9 && fragColor.z < 0.9)
+								{
+									fragColor.x = 0.9;
+								}
+								return fragColor;
+							}							
 
 							var textureUse : f32;
-							textureUse = f32(uni.usingTexture);							
+							textureUse = f32(uni.usingTexture);
 							if(uni.usingTexture == 1u)
 							{
-								return vec4f(vec4f(uni.Ka.x, uni.Ka.y, uni.Ka.z, 1) * textureSample(texture, textureSampler, fsInput.texCoords) * lightSystem.ambient + vec4f(dirLight + lightPower + specPower, 1));															
+								return vec4f(vec4f(uni.Ka.x, uni.Ka.y, uni.Ka.z, 1) * textureSample(texture, textureSampler, fsInput.texCoords) * lightSystem.ambient + vec4f(dirLight + lightPower + specPower, 1));
 							}
 							else
 							{
@@ -948,11 +1112,10 @@
 							}
 						}`
 					});
-					console.log("Created simple shader");							
+					console.log("Created simple shader");
 					
 					//BUFFER VARS
-
-					let shadowDepthTextureSize = 1024;
+					
 					this.lightBuffer = GPU.device.createBuffer({
 						label: 'lightBuffer',
 						size: 1152,
@@ -963,6 +1126,11 @@
 						size: 112,
 						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 					});										
+					this.uniformBuffer = GPU.device.createBuffer({
+						label: 'dummyUniform',
+						size: 132,
+						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+					});
 					//linear vs point sample distance for textures
 					this.sampler = this.device.createSampler({
 						addressModeU: 'repeat',
@@ -1100,14 +1268,16 @@
 						{
 							module: this.cellShaderModule,
 							entryPoint: "fragmentMain",
-							targets: [ {format: this.presentationFormat} ]
+							targets: [{format: this.presentationFormat}]
 						},
 						primitive:
 						{
-							topology: "triangle-list",	//experiment with rendering points here, change point size
-							cullMode: "none"
-							//topology: "triangle-strip",
-							//stripIndexFormat: "uint16",
+							//every 2 seconds with just this, though half flame
+							topology: "triangle-list",
+							cullMode: "none",
+							//every 3.5 seconds with this, full flame
+							// topology: "triangle-strip",
+							// stripIndexFormat: "uint16",
 						},						
 						depthStencil: {
 							format: "depth24plus-stencil8",
