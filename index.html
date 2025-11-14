@@ -1061,14 +1061,14 @@
 						fn smoke_density(pos: vec3<f32>) -> f32 {
 							let t = uni.timer * 0.3;
 
-							let base = 1.0 - smoothstep(0.0, 1.5, length(pos.xz));
+							let base = 1.0 - smoothstep(0.0, 2.5, length(pos.xz));
 
 							let n = noise(pos * 1.0 + vec3<f32>(0.0, t, 0.0));
 
 							var d = base * n;
 
 							d *= smoothstep(-1.0, 0.0, pos.y);
-							d *= (1.5 - clamp(pos.y, 0.0, 1.5));
+							d *= (2.5 - clamp(pos.y, 0.0, 2.5));
 
 							return max(d, 0.0);
 						}
@@ -1088,14 +1088,20 @@
 
 								let density = smoke_density(pos);
 
-								if (density <= 0.0001) { continue; }
+								if (density <= 0.0001) 
+								{ 
+									continue; 
+								}
 
-								let a = density * 0.1;  // <-- strength scaler (tune 0.05–0.2)
+								let a = density * 0.15;
 								alpha = alpha + (1.0 - alpha) * a;
 
 								color = color + vec3<f32>(0.6) * a;
 
-								if (alpha > 0.98) { break; }
+								if (alpha > 0.98) 
+								{ 
+									break; 
+								}
 							}
 
 							return vec4<f32>(color, alpha);
@@ -1258,7 +1264,6 @@
 
 								let sm = raymarch_smoke(org, dir);
 
-								// if it’s extremely transparent, skip
 								if (sm.a < 0.01) {
 									discard;
 								}
