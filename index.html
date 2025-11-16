@@ -717,6 +717,10 @@
 					var sun = GPU.CreateObject(1, CustomObj, [0.9, 1, 1], [0,0,0], result);
 					sun.specularity = 100;
 
+					// tnt Object
+					var result = ParseVertices(window.tnt, window.tntMtl);
+					var tnt = GPU.CreateObject(2, CustomObj, [4, -1, 1], [0,0,0], result, window.tntTexture);
+
 					console.log("parse vertices for cube");	
 					var result = ParseVertices(window.cube, window.cubeMtl);
 					var cube = GPU.CreateObject(1, CustomObj, [0.0, -2, 3], [0,0,0], result, window.spiralTexture, window.spiralNormals);
