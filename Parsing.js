@@ -163,7 +163,7 @@ function ParseVertices(fileContent, materialContent)
                 //replacing with textures for now
                 if(textureIdx != undefined)
                 {                    
-                    vertice.push(texel[0], texel[1]);            
+                    vertice.push(texel[0], texel[1]);
                 }
                 else
                 {

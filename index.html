@@ -14,12 +14,12 @@
 
 		<!-- All classes, and WebGPU will be defined (or imported) here -->
 		 <!-- WRITE MAT4 MATRICES DIRECTLY INTO BUFFER, DON'T REORDER -->
-		<SCRIPT>				 														  
+		<SCRIPT>			
 			
 			function FrameUpdate()
 			{				
 				GPU.UpdateAll();
-				GPU.RenderAll();
+				GPU.RenderAll();				
 				requestAnimationFrame(FrameUpdate);
 			}
 
@@ -38,7 +38,7 @@
 					this.curDir = -1;
 					this.moveSpeed = 0.1;
 
-					this.uniformBufferSize = 144;
+					this.uniformBufferSize = 160;
 					this.uniformBuffer = GPU.device.createBuffer({
 						label: 'uniformBuffer',
 						size: this.uniformBufferSize,
@@ -168,7 +168,7 @@
 						//will probably put this in a uniform later
 						this.Ka = parserData[2];
 						this.Ks = parserData[3];
-						this.specularity = parserData[4];									
+						this.specularity = parserData[4];						
 					}
 
 					this.vertexBuffer = GPU.device.createBuffer({
@@ -187,13 +187,12 @@
 
 					this.specularity = 1;
 
-					this.uniformBufferSize = 144;
+					this.uniformBufferSize = 160;
 					this.uniformBuffer = GPU.device.createBuffer({
 						label: 'uniformBuffer',
 						size: this.uniformBufferSize,
 						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-					});
-										
+					});										
 					
 					this.mainBindGroup = GPU.device.createBindGroup
 					({
@@ -218,18 +217,19 @@
 							{ binding: 2, resource: this.normalTextureObj.createView() },
 						],
 					});
-				}								
+					this.timer = 0.0;
+				}
 
 				Update()
 				{	
 					this.ApplySceneGraph();
+					//this.timer += (1/60);
 				}				
 
 				Render(pass)
 				{
-					pass.setBindGroup(0, this.mainBindGroup);
-					//don't need group(1) here
-					pass.setBindGroup(2, this.textureBindGroup);
+					pass.setBindGroup(0, this.mainBindGroup);					
+					pass.setBindGroup(2, this.textureBindGroup);								
 
 					//WebGPU arrays are column-major, so remake the translation matrix accordingly
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
@@ -243,6 +243,8 @@
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array(this.Ka));
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 96, new Float32Array(this.Ks));						
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 108, new Float32Array([this.specularity]));
+
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));
 					
 					pass.setVertexBuffer(0, this.vertexBuffer);
 					pass.setIndexBuffer(this.indexBuffer, "uint16");
@@ -267,8 +269,13 @@
 						entries: [
 							{ binding: 0, resource: {buffer: this.camBuff}},
 						],
-					});					
-				}				
+					});	
+					
+					this.moveSpeed = 0.06;
+					this.strafeSpeed = 0.06;
+					this.rotSpeed = 0.04;
+					this.elevateSpeed = 0.06;
+				}
 
 				Update()
 				{
@@ -276,45 +283,45 @@
 					this.transform.doRotations(this.rot);
 
 					if(GPU.CheckKey('D'))
-						this.rot[1] += 0.03;
+						this.rot[1] += this.rotSpeed;
 					if(GPU.CheckKey('A'))
-						this.rot[1] -= 0.03;
+						this.rot[1] -= this.rotSpeed;
 					
 					if(GPU.CheckKey('W'))
 					{
-						this.localPos[0] += this.transform.forward[0] * 0.04;
-						this.localPos[1] += this.transform.forward[1] * 0.04;
-						this.localPos[2] += this.transform.forward[2] * 0.04;
+						this.localPos[0] += this.transform.forward[0] * this.moveSpeed;
+						this.localPos[1] += this.transform.forward[1] * this.moveSpeed;
+						this.localPos[2] += this.transform.forward[2] * this.moveSpeed;
 					}
 					if(GPU.CheckKey('S'))
 					{
-						this.localPos[0] -= this.transform.forward[0] * 0.04;
-						this.localPos[1] -= this.transform.forward[1] * 0.04;
-						this.localPos[2] -= this.transform.forward[2] * 0.04;
+						this.localPos[0] -= this.transform.forward[0] * this.moveSpeed;
+						this.localPos[1] -= this.transform.forward[1] * this.moveSpeed;
+						this.localPos[2] -= this.transform.forward[2] * this.moveSpeed;
 					}
 					if(GPU.CheckKey('Z'))
 					{
-						this.localPos[1] -= 0.04;
+						this.localPos[1] -= this.elevateSpeed;
 					}
 					if(GPU.CheckKey('X'))
 					{
-						this.localPos[1] += 0.04;
+						this.localPos[1] += this.elevateSpeed;
 					}
 
 					//STRAFE CONTROLS
 					//Left key pressed. idk why left key is % with Towle's code
 					if(GPU.CheckKey('%'))
 					{						
-						this.localPos[0] -= 0.04 * this.transform.right[0];
-						this.localPos[1] -= 0.04 * this.transform.right[1];
-						this.localPos[2] -= 0.04 * this.transform.right[2];
+						this.localPos[0] -= this.strafeSpeed * this.transform.right[0];
+						this.localPos[1] -= this.strafeSpeed * this.transform.right[1];
+						this.localPos[2] -= this.strafeSpeed * this.transform.right[2];
 					}
 					//Right key pressed. this is right key apparently
 					if(GPU.CheckKey('\''))
 					{						
-						this.localPos[0] += 0.04 * this.transform.right[0];
-						this.localPos[1] += 0.04 * this.transform.right[1];
-						this.localPos[2] += 0.04 * this.transform.right[2];
+						this.localPos[0] += this.strafeSpeed * this.transform.right[0];
+						this.localPos[1] += this.strafeSpeed * this.transform.right[1];
+						this.localPos[2] += this.strafeSpeed * this.transform.right[2];
 					}
 				}								
 
@@ -322,7 +329,7 @@
 				{					
 					commandPass.setBindGroup(1, this.camGroup);
 					GPU.device.queue.writeBuffer(this.camBuff, 0, new Float32Array(this.pos));
-					GPU.device.queue.writeBuffer(this.camBuff, 16, new Float32Array(this.rot));				
+					GPU.device.queue.writeBuffer(this.camBuff, 16, new Float32Array(this.rot));
 				}
 			}
 
@@ -332,14 +339,14 @@
 				{
 					super();	
 
-					this.uniformBufferSize = 144;
+					this.uniformBufferSize = 160;
 					this.uniformBuffer = GPU.device.createBuffer({
 						label: 'uniformBuffer',
 						size: this.uniformBufferSize,
 						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 					});
 
-					//these triangles form a square, which is the area for the fire "texture"
+					//these triangles form a square, which is the area for the fire "texture"					
 					this.vertices = new Float32Array([
 						 -0.5,0.5,0, 0,0,0, -1, 1, 0,0,0,0,0,0,0,0,0,0,
 						-0.5,-0.5,0, 0,0,0, -1,-1, 0,0,0,0,0,0,0,0,0,0,
@@ -436,7 +443,7 @@
 				{
 					super();	
 
-					this.uniformBufferSize = 144;
+					this.uniformBufferSize = 160;
 					this.uniformBuffer = GPU.device.createBuffer({
 						label: 'uniformBuffer',
 						size: this.uniformBufferSize,
@@ -444,14 +451,16 @@
 					});
 
 					//these triangles form a square, which is the area for the fire "texture"
+					let maxDim = 0.5;
+					let maxUV = 1;
 					this.vertices = new Float32Array([
-						 -0.5,0.5,0, 0,0,0, -1, 1, 0,0,0,0,0,0,0,0,0,0,
-						-0.5,-0.5,0, 0,0,0, -1,-1, 0,0,0,0,0,0,0,0,0,0,
-						  0.5,0.5,0, 0,0,0,  1, 1, 0,0,0,0,0,0,0,0,0,0,
+						 -maxDim,maxDim,0, 0,0,0, -maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
+						-maxDim,-maxDim,0, 0,0,0, -maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
+						  maxDim,maxDim,0, 0,0,0,  maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
 						 
-						-0.5,-0.5,0, 0,0,0,  1,-1, 0,0,0,0,0,0,0,0,0,0,
-						 0.5,-0.5,0, 0,0,0, -1,-1, 0,0,0,0,0,0,0,0,0,0,
-						  0.5,0.5,0, 0,0,0, -1, 1, 0,0,0,0,0,0,0,0,0,0,
+						-maxDim,-maxDim,0, 0,0,0,  maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
+						 maxDim,-maxDim,0, 0,0,0, -maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
+						  maxDim,maxDim,0, 0,0,0, -maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
 					]);
 					
 					this.vertexBuffer = GPU.device.createBuffer({
@@ -492,18 +501,17 @@
 					
 					//set isFire to true in the shader
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([1]));
+					//set 
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 128, new Uint32Array([0]));
 				}												
 				
 				Update()
-				{					
+				{
 					this.ApplySceneGraph();
-					this.timer += (1/60);		
-					
-					//console.log("flame timer: " + this.timer);
+					this.timer += (1/60);
 
 					//make flame face camera for billboarded effect
-					this.localRot[1] = this.camera.rot[1];	
+					this.localRot[1] = this.camera.rot[1];
 					this.transform.doRotations(this.localRot);
 				}
 
@@ -533,6 +541,69 @@
 					
 					commandPass.setVertexBuffer(0, this.vertexBuffer);
 					commandPass.draw(6,1,0,0);
+				}
+			}
+
+			class Rope extends CustomObj
+			{
+				constructor(parserData)
+				{
+					super(parserData);
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 132, new Uint32Array([1])); //set isRope to true					
+
+					let edges = this.GetRopeEdges();
+					this.leftmostRopeX = edges[0];					
+					this.rightmostRopeX = edges[1];
+					this.currentBurnX = this.rightmostRopeX;
+					this.burnDistance = this.rightmostRopeX - this.leftmostRopeX;
+					this.ropeBurnTime = 5;
+				}
+				
+				GetRopeEdges()
+				{
+					let leftmostX = 0;
+					let rightmostX = 0;
+					let minX = 9999;
+					let maxX = -9999;
+					for(let i = 0; i < this.vertices.length; i += GPU.vertexStride)
+					{
+						if(this.vertices[i] < leftmostX)
+							leftmostX = this.vertices[i];
+						if(this.vertices[i] > rightmostX)
+							rightmostX = this.vertices[i];
+					}					
+					return [leftmostX, rightmostX];
+				}				
+
+				Update()
+				{
+					this.ApplySceneGraph();
+					// ex: burnDist = 10, burnTime = 5, 2 change per second, 2 * 1/60 = change per frame
+					if(this.currentBurnX > this.leftmostRopeX)
+						this.currentBurnX -= (1/60) * (this.burnDistance/this.ropeBurnTime);
+				}
+
+				Render(commandPass)
+				{
+					commandPass.setBindGroup(0, this.mainBindGroup);
+					commandPass.setBindGroup(2, this.textureBindGroup);
+				
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 144, new Float32Array([this.currentBurnX, 1, this.pos[2]])); //update burnPos in shader
+
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
+						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
+						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
+						this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
+						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
+					]));				
+
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array(this.Ka));
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 96, new Float32Array(this.Ks));						
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 108, new Float32Array([this.specularity]));
+
+					commandPass.setVertexBuffer(0, this.vertexBuffer);
+					commandPass.setIndexBuffer(this.indexBuffer, "uint16");
+					commandPass.drawIndexed(this.indexes.length);
 				}
 			}
 
@@ -568,14 +639,24 @@
 				async SlowStart()
 				{					
 					//you can specify less parameters than the function defines and JS will still run it
-					var camera = this.CreateObject(0, Camera, [3,-3,-2], [0,0,0]);					
+					var camera = this.CreateObject(0, Camera, [3,-3,-2], [0,0,0]);
+
+					console.log("parse vertices for rope");
+					var result = ParseVertices(window.rope, window.ropeMtl);	
+					var rope = this.CreateObject(1, Rope, [0,0,-0.5], [0,0,0], result);
+					rope.specularity = 100;
+					rope.localScale[0] *= 1.5;
+					rope.localScale[1] *= 0.2;					
+					rope.localScale[2] *= 0.2;
 
 					var pointLight;
-					for(let i = 0; i < 3; i++)
+					for(let i = 0; i < 5; i++)
 					{												
 						pointLight = this.CreateObject(0, PointLight, [0+i*8,2, 0], [0,0,0]);						
-						pointLight.color = [0.4, 0.4, 0.4];
-						//changing specularity of pointlight doesn't do anything since it's the light itself						
+						pointLight.color = [0.1, 0.1, 0.1];						
+
+						// var flame = this.CreateObject(0, Flame, [0,0,0], [0,0,0]);
+						// flame.SetParent(pointLight);
 
 						// console.log("parse vertices for disco ball");
 						// var result = ParseVertices(window.discoBall, window.discoBallMtl);
@@ -590,6 +671,7 @@
 						var light = this.CreateObject(0, SpotLight, [-5+(i*6),-1.2,0], [0.5,0,0]);
 						light.color = [i/3, 0, 0.5];
 						
+						console.log("parse vertices for spotlight");
 						var result = ParseVertices(window.spotlight, window.spotlightMtl);
 						var spotlight = GPU.CreateObject(1, CustomObj, [i*2, 2, 1.5], [0,0,0], result);
 						spotlight.specularity = 100;
@@ -603,7 +685,7 @@
 
 					console.log("parse vertices for ground");
 					var result = ParseVertices(window.ground, window.groundMtl);
-					var ground = GPU.CreateObject(1, CustomObj, [0,-5.5,1.1], [0,0,0], result, window.grassTexture2, window.grassNormals2);
+					var ground = GPU.CreateObject(1, CustomObj, [0,-5.5,1.1], [0,0,0], result, window.grassTexture, window.grassNormals);
 					ground.localScale = [15,15,15];
 					ground.specularity = 105;
 
@@ -637,11 +719,11 @@
 
 					console.log("parse vertices for cube");	
 					var result = ParseVertices(window.cube, window.cubeMtl);
-					var cube = GPU.CreateObject(1, CustomObj, [0.9, -1, 3], [0,0,0], result, window.spiralTexture, window.spiralNormals);
-					cube.specularity = 100;															
+					var cube = GPU.CreateObject(1, CustomObj, [0.0, -2, 3], [0,0,0], result, window.spiralTexture, window.spiralNormals);
+					cube.specularity = 100;					
 
 					var flame = this.CreateObject(0, Flame, [3,-3,0], [0,0,0]);
-					// TEST Smoke
+					//TEST Smoke
 					var smoke = this.CreateObject(1, Smoke, [3, -2, 0], [0, 0, 0]);
 
 					requestAnimationFrame(FrameUpdate);
@@ -837,7 +919,7 @@
 					this.cellShaderModule = this.device.createShaderModule
 					({
 						label: "mainModule",						
-						code: `												
+						code: `	
 						struct Uniforms
 						{
 							matrix: mat4x4<f32>, //offset 0
@@ -846,29 +928,31 @@
 							Ka: vec3f, //offset 80
 							Ks: vec3f, //offset 96
 							shiny: f32, //offset 112
-							
-							//essentially just bool variables
-							usingTexture: u32, 
+														
+							usingTexture: u32,
 							usingNormalMaps: u32,
-							
-							//for flame
+														
 							timer: f32, 
 							isFire: u32,
 							isSmoke: u32,
+							isRope: u32,
+
+							burnPos: vec3f,
 						};						
 						@group(0) @binding(0) var<uniform> uni: Uniforms;				
 
 						struct VertexOutput
 						{
-							@builtin(position) position: vec4f,			
+							@builtin(position) position: vec4f,
 							@location(0) color: vec3f,	
-							@location(1) texCoords: vec2f, //instead of 
+							@location(1) texCoords: vec2f,
 							@location(2) normal: vec4f,
 							@location(3) Ka: vec3f,
 							@location(4) Ks: vec3f,
 							@location(5) shiny: f32,
-							@location(6) worldSpace: vec3f, //for point light?
-							@location(7) vectorToCam: vec3f, //for specularity								
+							@location(6) worldSpace: vec3f,
+							@location(7) vectorToCam: vec3f, //for specularity									
+							@location(8) burnWorld: vec3f,
 						};				
 
 						struct PointLight
@@ -1113,17 +1197,20 @@
 						{
 							var vOutput: VertexOutput;
 							let worldPos4: vec4<f32> = uni.matrix * vec4f(pos, 1.0);
-							let worldPos3: vec3<f32> = worldPos4.xyz;
-
-							vOutput.Ka = Ka;
-							vOutput.Ks = Ks;
-							vOutput.shiny = shiny;																										
+							let worldPos3: vec3<f32> = worldPos4.xyz;																															
 
 							vOutput.worldSpace = worldPos3;
 							vOutput.position = PerspectiveProjection(MoveCamera(worldPos4));
+							
+							var burnWorld: vec4f = uni.matrix * vec4f(uni.burnPos, 1.0);
+							vOutput.burnWorld = burnWorld.xyz;
 
 							vOutput.normal = rotate(vec4f(normal, 0.0));
 							vOutput.vectorToCam = myCam.translation - vOutput.worldSpace.xyz;
+
+							vOutput.Ka = Ka;
+							vOutput.Ks = Ks;
+							vOutput.shiny = shiny;
 														
 							vOutput.color = col;
 							vOutput.texCoords = texCoords;
@@ -1140,6 +1227,38 @@
 						@fragment
 						fn fragmentMain(fsInput: VertexOutput) -> @location(0) vec4f
 						{	
+							if(uni.isFire == 1u)
+							{
+								var v = -1.0 + 2.0 * fsInput.texCoords.xy / 1.0;
+								var org = vec3<f32>(0, -2, 4);
+								var dir = normalize(vec3<f32>(v.x * 1.6, -v.y, -1.5));
+
+								var pos = raymarch(org, dir);
+								var glow = pos.w;
+
+								var col = mix(vec4<f32>(1, 0.5, 0.1, 1), vec4<f32>(0.1, 0.5, 1, 1), pos.y * 0.02 + 0.4);
+								var fragColor = mix(vec4<f32>(0), col, pow(glow*2, 4));
+								fragColor.w = 1.0;
+								if(glow < 0.05)
+								{
+									discard;
+								}
+								else if(fragColor.x < 0.9 && fragColor.y < 0.9 && fragColor.z < 0.9)
+								{
+									fragColor.x = 0.9;
+								}
+								return fragColor;
+							}
+							
+							if(uni.isRope == 1u)
+							{					
+								//burnWorld moves left. discard pixels as burnWorld reaches them
+								if (fsInput.worldSpace.x > fsInput.burnWorld.x)
+								{
+									discard;
+								}
+							}
+
 							var AMBIENT_TOTAL = fsInput.color * lightSystem.ambient;		
 							var newNormal: vec3f = fsInput.normal.xyz;
 							var normalizedNormal: vec3f = normalize(fsInput.normal.xyz);
@@ -1194,8 +1313,7 @@
 								//dividing by length gives light falloff, light intensity variable is the coefficient here
 								IL = 5 * max( dot(normalize(newNormal.xyz),LPosSafe), 0.0 ) / (1 + length(light.position.xyz - fsInput.worldSpace));
 								lightPower += light.color.xyz*IL;
-
-								//specularity
+								
 								if(IL > 0.0)
 								{									
 									reflection = reflectVec(-normalize(light.position.xyz - fsInput.worldSpace), normalize(newNormal).xyz);
@@ -1231,30 +1349,7 @@
 								
 								IL = max( dot(normalize(newNormal.xyz), normalize(light.direction)), 0.0 );
 								dirLight += IL * light.color.xyz;
-							}																
-														
-							if(uni.isFire == 1u)
-							{
-								var v = -1.0 + 2.0 * fsInput.texCoords.xy / 1.0;
-								var org = vec3<f32>(0, -2, 4);
-								var dir = normalize(vec3<f32>(v.x * 1.6, -v.y, -1.5));
-
-								var pos = raymarch(org, dir);
-								var glow = pos.w;
-
-								var col = mix(vec4<f32>(1, 0.5, 0.1, 1), vec4<f32>(0.1, 0.5, 1, 1), pos.y * 0.02 + 0.4);
-								var fragColor = mix(vec4<f32>(0), col, pow(glow*2, 4));
-								fragColor.w = 1.0;								
-								if(glow < 0.05)
-								{
-									discard;
-								}
-								else if(fragColor.x < 0.9 && fragColor.y < 0.9 && fragColor.z < 0.9)
-								{
-									fragColor.x = 0.9;
-								}
-								return fragColor;
-							}
+							}																																					
 
 							if (uni.isSmoke == 1u) 
 							{
@@ -1301,7 +1396,7 @@
 					});										
 					this.uniformBuffer = GPU.device.createBuffer({
 						label: 'dummyUniform',
-						size: 144,
+						size: 160,
 						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 					});
 					//linear vs point sample distance for textures
