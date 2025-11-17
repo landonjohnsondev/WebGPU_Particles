@@ -89,6 +89,13 @@ class GameObject
 		this.id = 0;
 		this.prefab;
 		this.transform = new Transform();
+
+		this.uniformBufferSize = 176;
+		this.uniformBuffer = GPU.device.createBuffer({
+			label: 'uniformBuffer',
+			size: this.uniformBufferSize,
+			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+		});
 	}
 
 	VectorSum(vector1, vector2)

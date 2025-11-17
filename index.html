@@ -41,14 +41,7 @@
 					this.moveTime = 2.0;
 					this.moveTimer = 2.0;
 					this.curDir = -1;
-					this.moveSpeed = 0.1;
-
-					this.uniformBufferSize = 176;
-					this.uniformBuffer = GPU.device.createBuffer({
-						label: 'uniformBuffer',
-						size: this.uniformBufferSize,
-						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-					});
+					this.moveSpeed = 0.1;					
 				}
 				
 				Update() 
@@ -190,14 +183,7 @@
 					});
 					GPU.device.queue.writeBuffer(this.indexBuffer, /*bufferOffset=*/0, this.indexes);
 
-					this.specularity = 1;
-
-					this.uniformBufferSize = 176;
-					this.uniformBuffer = GPU.device.createBuffer({
-						label: 'uniformBuffer',
-						size: this.uniformBufferSize,
-						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-					});										
+					this.specularity = 1;											
 					
 					this.mainBindGroup = GPU.device.createBindGroup
 					({
@@ -341,14 +327,7 @@
 			{
 				constructor(pos, rot, scale, rawTexture, normalMap)
 				{
-					super(pos, rot, scale);	
-
-					this.uniformBufferSize = 176;
-					this.uniformBuffer = GPU.device.createBuffer({
-						label: 'uniformBuffer',
-						size: this.uniformBufferSize,
-						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-					});
+					super(pos, rot, scale);				
 
 					//these triangles form a square, which is the area for the fire "texture"					
 					this.vertices = new Float32Array([
@@ -395,8 +374,9 @@
 					
 					this.camera = this.GetCamera();
 					
-					//set isFire to true in the shader
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([0]));
+					// //set isFire to true in the shader
+					// GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([0]));
+					//set isSmoke to true in the shader
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 128, new Uint32Array([1]));
 				}												
 				
@@ -434,7 +414,7 @@
 						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
 						this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
 						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
-					]));				
+					]));
 					
 					commandPass.setVertexBuffer(0, this.vertexBuffer);
 					commandPass.draw(6,1,0,0);
@@ -446,14 +426,7 @@
 				constructor(pos, rot, scale)
 				{
 					super(pos, rot, scale);	
-
-					this.uniformBufferSize = 176;
-					this.uniformBuffer = GPU.device.createBuffer({
-						label: 'uniformBuffer',
-						size: this.uniformBufferSize,
-						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-					});
-
+										
 					//these triangles form a square, which is the area for the fire "texture"
 					let maxDim = 0.5;
 					let maxUV = 1;
@@ -751,12 +724,14 @@
 
 				SetExplodePos(pos)
 				{
+					for(var i in GPU.Visual)
+						GPU.device.queue.writeBuffer(GPU.Visual[i].uniformBuffer, 160, new Float32Array(pos));
 					for(var i in GPU.Solid)
 						GPU.device.queue.writeBuffer(GPU.Solid[i].uniformBuffer, 160, new Float32Array(pos));
 					for(var i in GPU.Trigger)
 						GPU.device.queue.writeBuffer(GPU.Trigger[i].uniformBuffer, 160, new Float32Array(pos));
 
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 160, new Float32Array(pos));			
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 160, new Float32Array(pos));
 				}
 
 				Update()
@@ -858,13 +833,9 @@
 
 						// var flame = this.CreateObject(0, Flame, [0,0,0], [0,0,0]);
 						// flame.SetParent(pointLight);
-
-						// console.log("parse vertices for disco ball");
+						
 						// var result = ParseVertices(window.discoBall, window.discoBallMtl);
-						// var discoBall = GPU.CreateObject(1, CustomObj, [0.0, 0, 0], [0,0,0], result);
-						// discoBall.specularity = 1000;
-						// discoBall.SetParent(pointLight);
-						// discoBall.localRot[1] += 1.5;
+						// var discoBall = GPU.CreateObject(1, CustomObj, [0.0, 0, 0], [0,1.5,0], [1,1,1], result);
 					}
 
 					for(let i = 0; i < 3; i++)
@@ -872,15 +843,9 @@
 						console.log("creating spotlight...");
 						var light = this.CreateObject(0, SpotLight, [-5+(i*6),-1.2,0], [0.5,0,0]);
 						light.color = [i/3, 0, 0.5];
-						
-						// console.log("parse vertices for flyingSpotlight");
+												
 						// var result = ParseVertices(window.spotlight, window.spotlightMtl);
-						// var spotlight = GPU.CreateObject(1, CustomObj, [i*2, 2, 1.5], [0,0,0], [1,1,1], result);
-						// spotlight.specularity = 100;
-						// spotlight.SetParent(light);
-						// spotlight.localScale[0] *= 0.5;
-						// spotlight.localScale[1] *= 0.5;
-						// spotlight.localScale[2] *= 0.5;
+						// var spotlight = GPU.CreateObject(1, CustomObj, [i*2, 2, 1.5], [0,0,0], [0.5,0.5,0.5], result);
 					}		
 					var l = this.CreateObject(0, DirectionalLight, [5, 5.0, 0], [0,3,0]);
 					l.color = [0.15,0.15,0.15];
@@ -916,12 +881,7 @@
 					console.log("parse vertices for cube");
 					var result = ParseVertices(window.cube, window.cubeMtl);
 					var cube = GPU.CreateObject(1, CustomObj, [0.0, -2, 3], [0,0,0], [1,1,1], result, window.spiralTexture, window.spiralNormals);
-					cube.specularity = 100;										
-
-					//var flame = this.CreateObject(0, Flame, [3,-3,0], [0,0,0]);
-					//TEST Smoke
-					console.log("creating smoke...");
-					var smoke = this.CreateObject(1, Smoke, [2, -3, 0], [0, 0, 0]);					
+					cube.specularity = 100;																				
 
 					// new rope
 					console.log("parse vertices for rope");
@@ -929,6 +889,7 @@
 					var rope1 = GPU.CreateObject(1, Rope, [4, -4, 0], [0,0,0], [1,1,0.2], result);
 					rope1.specularity = 100;
 
+					//tnt needs to be made near the end of slow start so it can set explodePos on all objects
 					// tnt Object
 					console.log("parse vertices for tnt");
 					var result = ParseVertices(window.tnt, window.tntMtl);
@@ -938,7 +899,12 @@
 					console.log("creating flame...")
 					var flame = GPU.CreateObject(0, Flame, ropeRightEnd, [0,0,0]);
 					flame.StartRope(rope1);
-					flame.currentTnt = tnt;
+					flame.currentTnt = tnt;					
+
+					//TEST Smoke
+					console.log("creating smoke...");
+					var smoke = this.CreateObject(1, Smoke, [2, 1, 0], [0, 0, 0], [1,1,1]);
+					//smoke.SetParent(flame);
 
 					this.startTime = performance.now();
 					this.loops = 0;
@@ -1462,7 +1428,7 @@
 							}
 
 							//hard coded explosion radius for now, might customize later
-							if(distance(fsInput.worldSpace, uni.explodePos) < 8)
+							if(distance(fsInput.worldSpace, uni.explodePos) < 8) // && uni.isSmoke == 0u
 							{
 								discard;
 							}
