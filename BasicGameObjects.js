@@ -50,16 +50,19 @@ class Transform
 
 class GameObject
 {
-	constructor() 
+	constructor(pos, rot, scale) 
 	{
-		this.pos = [0,0,0];
-		this.localPos = [0,0,0];
+		this.pos = [pos[0],pos[1],pos[2]];
+		this.localPos = [pos[0],pos[1],pos[2]];
 
-		this.rot = [0,0,0];
-		this.localRot = [0,0,0];
+		this.rot = [rot[0],rot[1],rot[2]];
+		this.localRot = [rot[0],rot[1],rot[2]];
 
+		if(scale == undefined)
+			scale = [1,1,1];
+		
 		this.scale = [1,1,1];
-		this.localScale = [1,1,1];
+		this.localScale = [scale[0],scale[1],scale[2]];
 
 		this.localWorldMatrix = [
 									[1,0,0,0],
@@ -95,6 +98,43 @@ class GameObject
 		sum.push(vector1[1] + vector2[1]);
 		sum.push(vector1[2] + vector2[2]);
 		return sum;
+	}
+
+	VectorDistance(vector1, vector2)
+	{
+		let dist = 0.0;
+		dist += math.pow(vector1[0] - vector2[0], 2);
+		dist += math.pow(vector1[1] - vector2[1], 2);	
+		dist += math.pow(vector1[2] - vector2[2], 2);
+		dist = math.sqrt(dist);
+		return dist;
+	}
+
+	SortByX(positions)
+	{
+		let sortedPositions = [];
+		let positionsUsed = [];
+
+		for(let i = 0; i < positions.length; i++)
+			positionsUsed[i] = false;
+
+		for(let i = 0; i < positions.length; i++)
+		{
+			let minX = 9999;
+			let maxPosIdx = -1;
+			for(let j = 0; j < positions.length; j++)
+			{
+				if(positions[j][0] < minX && !positionsUsed[j])
+				{
+					minX = positions[j][0];
+					maxPosIdx = j;
+				}
+			}
+			sortedPositions.push([positions[maxPosIdx][0], positions[maxPosIdx][1], positions[maxPosIdx][2]]);
+			positionsUsed[maxPosIdx] = true;
+		}
+		console.log("positions sorted by x: " + sortedPositions);
+		return sortedPositions;			
 	}
 				
 	Move()
@@ -328,9 +368,9 @@ class GameObject
 
 class Light extends GameObject
 {
-	constructor()
+	constructor(pos, rot, scale)
 	{
-		super();
+		super(pos, rot, scale);
 		this.pos[3] = 1;
 		this.color = [1, 0.5, 0.5, 1];
 		this.specularity = 50.0;
