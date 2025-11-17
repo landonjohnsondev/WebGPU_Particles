@@ -107,7 +107,7 @@ class GameObject
 		return sum;
 	}
 
-	VectorDistance(vector1, vector2)
+	VectorDistance(vector1, vector2) // two positions
 	{
 		let dist = 0.0;
 		dist += math.pow(vector1[0] - vector2[0], 2);

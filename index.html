@@ -373,9 +373,7 @@
 					});
 					
 					this.camera = this.GetCamera();
-					
-					// //set isFire to true in the shader
-					// GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([0]));
+										
 					//set isSmoke to true in the shader
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 128, new Uint32Array([1]));
 				}												
@@ -591,6 +589,22 @@
 					this.leftmostBurnPos = this.burnPositions[0];
 					this.rightmostBurnPos = this.burnPositions[1];										
 					this.currentFlame = undefined;
+					
+					this.camera = this.GetCamera();
+					this.litFire = 0; // 0 if not, 1 if you have lit the fire
+
+					//if firePos isn't initialized in the shader, it will be 0,0,0 and hide the rope
+					let dummyFirePos = [9999,9999,9999];
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 144, new Float32Array(dummyFirePos));
+				}
+				
+				GetCamera()
+				{
+					for(var i in GPU.Visual)
+					{
+						if(GPU.Visual[i] instanceof Camera)
+							return GPU.Visual[i];
+					}
 				}				
 
 				GetSortedPathPositions()
@@ -678,7 +692,24 @@
 
 				Update()
 				{
-					this.ApplySceneGraph();					
+					this.ApplySceneGraph();
+					
+					if(this.litFire == 0)
+					{
+						this.distFromCamera = this.VectorDistance(this.pos, this.camera.pos);
+						// Certain radius from camera
+						if (this.distFromCamera <= 4) 
+						{
+							// Player presses 'E' to light fire
+							if(GPU.CheckKey('E')) 
+							{
+								this.litFire = 1;
+								var flame = GPU.CreateObject(0, Flame, GPU.ropeRightEnd, [0,0,0]);
+								flame.StartRope(GPU.rope1);
+								flame.currentTnt = GPU.tnt;
+							}
+						}
+					}
 				}
 
 				Render(commandPass)
@@ -881,30 +912,30 @@
 					console.log("parse vertices for cube");
 					var result = ParseVertices(window.cube, window.cubeMtl);
 					var cube = GPU.CreateObject(1, CustomObj, [0.0, -2, 3], [0,0,0], [1,1,1], result, window.spiralTexture, window.spiralNormals);
-					cube.specularity = 100;																				
+					cube.specularity = 100;										
+
+					//TEST Smoke					
+					//why does smoke not move up when positioned with certain scales?
+					console.log("creating smoke...");
+					var smoke = this.CreateObject(1, Smoke, [2, -3, 0], [0, 1, 0], [1,1,1]);
 
 					// new rope
 					console.log("parse vertices for rope");
 					var result = ParseVertices(window.rope1, window.rope1Mtl);
-					var rope1 = GPU.CreateObject(1, Rope, [4, -4, 0], [0,0,0], [1,1,0.2], result);
-					rope1.specularity = 100;
+					this.rope1 = GPU.CreateObject(1, Rope, [4, -4, 0], [0,0,0], [1,1,0.2], result);
+					this.rope1.specularity = 100;
 
 					//tnt needs to be made near the end of slow start so it can set explodePos on all objects
 					// tnt Object
 					console.log("parse vertices for tnt");
 					var result = ParseVertices(window.tnt, window.tntMtl);
-					var tnt = GPU.CreateObject(2, Tnt, [4, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+					this.tnt = GPU.CreateObject(2, Tnt, [4, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
 
-					var ropeRightEnd = [rope1.rightmostBurnPos[0], rope1.rightmostBurnPos[1], rope1.pos[2]];
+					this.ropeRightEnd = [this.rope1.rightmostBurnPos[0], this.rope1.rightmostBurnPos[1], this.rope1.pos[2]];
 					console.log("creating flame...")
-					var flame = GPU.CreateObject(0, Flame, ropeRightEnd, [0,0,0]);
+					/*var flame = GPU.CreateObject(0, Flame, this.ropeRightEnd, [0,0,0]);
 					flame.StartRope(rope1);
-					flame.currentTnt = tnt;					
-
-					//TEST Smoke
-					console.log("creating smoke...");
-					var smoke = this.CreateObject(1, Smoke, [2, 1, 0], [0, 0, 0], [1,1,1]);
-					//smoke.SetParent(flame);
+					flame.currentTnt = tnt;*/						
 
 					this.startTime = performance.now();
 					this.loops = 0;
