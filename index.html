@@ -2,6 +2,7 @@
 	<HEAD>
 		<BODY>
 			<canvas id="myCanvas" width="800" height="800"></canvas>
+			<audio id="boom" src="Audio/VineBoom.mp3"></audio>
 		</BODY>
 	
 	
@@ -191,7 +192,7 @@
 
 					this.specularity = 1;
 
-					this.uniformBufferSize = 160;
+					this.uniformBufferSize = 168;
 					this.uniformBuffer = GPU.device.createBuffer({
 						label: 'uniformBuffer',
 						size: this.uniformBufferSize,
@@ -221,13 +222,12 @@
 							{ binding: 2, resource: this.normalTextureObj.createView() },
 						],
 					});
-					this.timer = 0.0;
+					this.timer = 0.0;					
 				}
 
 				Update()
 				{	
-					this.ApplySceneGraph();
-					//this.timer += (1/60);
+					this.ApplySceneGraph();					
 				}				
 
 				Render(pass)
@@ -501,9 +501,10 @@
 						],
 					});
 					
-					this.flameSpeedPerSecond = 1.0;
+					this.flameSpeedPerSecond = 0.5;
 					this.camera = this.GetCamera();
 					this.currentRope = undefined;
+					this.currentTnt = undefined;
 					
 					//set isFire to true in the shader
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([1]));				
@@ -512,30 +513,27 @@
 				SetGoalPos(goalPos)
 				{											
 					this.goalPos = goalPos;
+					console.log("goalPos: " + goalPos);
+
 					this.burnDistance = this.VectorDistance(this.pos, goalPos);
-					//could multiply by speedPerSecond here later
 					this.ropeBurnTime = this.burnDistance / this.flameSpeedPerSecond;
 
 					this.xChangeToGoal = goalPos[0] - this.pos[0];
 					this.yChangeToGoal = goalPos[1] - this.pos[1];
-					this.zChangeToGoal = goalPos[2] - this.pos[2];		
-					
-					// console.log("xChangeToGoal: " + this.xChangeToGoal);
-					// console.log("yChangeToGoal: " + this.yChangeToGoal);
-					// console.log("zChangeToGoal: " + this.zChangeToGoal);
+					this.zChangeToGoal = goalPos[2] - this.pos[2];					
 				}
 
 				//sets currentRope and sets goal pos to rightmost goal vertice found
 				StartRope(rope)
 				{
 					this.currentRope = rope;
-					rope.currentFlame = this;
+					rope.currentFlame = this;					
 
-					let pathPositions = rope.GetSortedPathPositions();		
-					console.log("sorted path positions: " + pathPositions);
-					this.goalPos = pathPositions[pathPositions.length-1];
-					console.log("set goal pos to: " + this.goalPos);
-					this.SetGoalPos(this.goalPos);
+					this.pathPositions = rope.GetSortedPathPositions();					
+
+					this.goalIdx = this.pathPositions.length-1;
+					this.goalPos = this.pathPositions[this.goalIdx];
+					this.SetGoalPos(this.goalPos, this.pathPositions.length-1);
 				}
 
 				GetCamera()
@@ -565,18 +563,22 @@
 						//x += (1/60) * (10/5), //x changes by 2 every second, moves x by 10 in 5 seconds!
 						this.localPos[0] += (1/60) * (this.xChangeToGoal/this.ropeBurnTime);
 						this.localPos[1] += (1/60) * (this.yChangeToGoal/this.ropeBurnTime);
-						this.localPos[2] += (1/60) * (this.zChangeToGoal/this.ropeBurnTime);				
+						this.localPos[2] += (1/60) * (this.zChangeToGoal/this.ropeBurnTime);			
 					}
-					else if(this.currentRope.parent != null)
-					{							
-						//this logic isn't used currently
-						//for multiple ropes, this transitions to the next rope once the current rope is fully burnt
-						this.StartRope(this.currentRope.parent);
-					}					
 					else
+					{					
+						this.goalIdx--;
+						if(this.goalIdx < 0)
+							this.currentRope = undefined;
+						else													
+							this.SetGoalPos(this.pathPositions[this.goalIdx]);						
+					}
+					
+					if(this.currentRope == undefined)					
 					{
-						GPU.DestroyObject(this.id);
-					}					
+						GPU.DestroyObject(this.id);	
+						this.currentTnt.StartFlashing(0.15);
+					}				
 				}
 											
 				Render(commandPass)
@@ -586,7 +588,7 @@
 
 					//The reason for the timer issue is that every object uses its own uniform buffer, which sets timer to 0					
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));
-
+					
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
 						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
 						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
@@ -610,14 +612,14 @@
 					this.burnPositions = this.GetRopeEdges();
 					this.leftmostBurnPos = this.burnPositions[0];
 					this.rightmostBurnPos = this.burnPositions[1];										
-					this.currentFlame = undefined;					
+					this.currentFlame = undefined;
 				}				
 
 				GetSortedPathPositions()
 				{
 					let positions = [];
 					let reachedPath = false;					
-					for(const line of window.rope.split("\n"))
+					for(const line of window.rope1.split("\n"))
 					{						
 						if(line.substring(0,6) == "o Vert")					
 							reachedPath = true;																			
@@ -625,6 +627,7 @@
 						if(reachedPath && line[0] == "v")
 						{
 							let position = line.substring(2).split(' ');
+							
 
 							position[0] *= this.localScale[0];
 							position[1] *= this.localScale[1];
@@ -632,14 +635,13 @@
 							
 							position[0] += this.pos[0];
 							position[1] += this.pos[1];
-							position[2] += this.pos[2];							
+							position[2] += this.pos[2];													
 
-							position[0] *= math.cos(this.rot[2]);
+							//position[0] *= math.cos(this.rot[2]);
 							//THIS WILL BREAK LATER IF POSITION[0] IS NOT THE HALF LENGTH OF THE ROPE
-							position[1] = position[0] * math.tan(this.rot[2]);
+							//position[1] = position[0] * math.tan(this.rot[2]);
 
-							positions.push([position[0], position[1], position[2]]);
-							//console.log("path position after trig: " + position);
+							positions.push([position[0], position[1], position[2]]);							
 						}
 					}
 					positions = this.SortByX(positions);
@@ -685,12 +687,12 @@
 					rightmostPos[1] *= this.localScale[1];
 					rightmostPos[2] *= this.localScale[2];
 															
-					rightmostPos[0] *= math.cos(this.rot[2]);
+					//rightmostPos[0] *= math.cos(this.rot[2]);
 					//tan(theta) = y/x, y = x * tan(theta), x = halfLength of rope
-					rightmostPos[1] = rightmostPos[0] * math.tan(this.rot[2]);
+					//rightmostPos[1] = rightmostPos[0] * math.tan(this.rot[2]);
 					
-					console.log("leftmost actual rope pos: " + leftmostPos);
-					console.log("rightmost actual rope pos: " + rightmostPos);
+					// console.log("leftmost actual rope pos: " + leftmostPos);
+					// console.log("rightmost actual rope pos: " + rightmostPos);
 					
 					this.ropeLength = this.localScale[0] * (rightmostPos[0] - leftmostPos[0]);
 					return [leftmostPos, rightmostPos];
@@ -707,8 +709,11 @@
 					commandPass.setBindGroup(2, this.textureBindGroup);
 				
 					//update burnPos in shader
-					if(this.currentFlame != undefined)																
-						GPU.device.queue.writeBuffer(this.uniformBuffer, 144, new Float32Array(this.currentFlame.pos));					
+					if(this.currentFlame != undefined)
+					{
+						//console.log("writing flamePos " + this.currentFlame.pos + " to shader");						
+						GPU.device.queue.writeBuffer(this.uniformBuffer, 144, new Float32Array(this.currentFlame.pos));
+					}
 
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
 						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
@@ -717,6 +722,76 @@
 						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
 					]));				
 
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array(this.Ka));
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 96, new Float32Array(this.Ks));						
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 108, new Float32Array([this.specularity]));
+
+					commandPass.setVertexBuffer(0, this.vertexBuffer);
+					commandPass.setIndexBuffer(this.indexBuffer, "uint16");
+					commandPass.drawIndexed(this.indexes.length);
+				}
+			}
+
+			class Tnt extends CustomObj
+			{
+				constructor(parserData, rawTexture, normalMap, pos, rot, scale)
+				{					
+					super(parserData, rawTexture, normalMap, pos, rot, scale);
+					this.flashTimer = 0.0;
+					this.flashInterval = -1;
+					this.flashOn = 1;
+					this.explodeTimer = 2;
+					this.isFlashing = false;
+
+					//set usingTexture to true
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 112, new Uint32Array([1]));		
+				}
+
+				Update()
+				{
+					this.ApplySceneGraph();
+
+					this.flashTimer -= (1/60);
+					if(this.flashTimer < 0 && this.isFlashing)
+					{
+						this.flashTimer = this.flashInterval;						
+						(this.flashOn == 0) ? this.flashOn = 1 : this.flashOn = 0;
+						//set usingTexture to true/false
+						GPU.device.queue.writeBuffer(this.uniformBuffer, 156, new Uint32Array([this.flashOn]));
+					}					
+
+					if(this.isFlashing)
+					{
+						this.explodeTimer -= (1/60);
+						if(this.explodeTimer < 0)
+						{
+							GPU.DestroyObject(this.id);
+							document.getElementById("boom").play();
+						}
+					}
+				}			
+
+				StartFlashing(interval)
+				{													
+					//set isFlashing to true
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 156, new Uint32Array([1]));
+					this.flashTimer = interval;
+					this.flashInterval = interval;
+					this.isFlashing = true;
+				}
+				
+				Render(commandPass)
+				{
+					commandPass.setBindGroup(0, this.mainBindGroup);
+					commandPass.setBindGroup(2, this.textureBindGroup);									
+
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
+						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
+						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
+						this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
+						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
+					]));				
+					
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array(this.Ka));
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 96, new Float32Array(this.Ks));						
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 108, new Float32Array([this.specularity]));
@@ -760,23 +835,30 @@
 				{					
 					//you can specify less parameters than the function defines and JS will still run it
 					var camera = this.CreateObject(0, Camera, [3,-3,-2], [0,0,0]);
-
-					console.log("parse vertices for rope");					
-					var result = ParseVertices(window.rope, window.ropeMtl);
-					//when x local scale is changed, the flame speed isn't correct for some reason
-					var rope1 = this.CreateObject(1, Rope, [0,0,-0.5], [0,0,0], [1, 0.1, 0.1], result);
+										
+					// tnt Object
+					console.log("parse vertices for tnt");
+					var result = ParseVertices(window.tnt, window.tntMtl);
+					var tnt = GPU.CreateObject(2, Tnt, [4, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+										
+					// new rope
+					console.log("parse vertices for rope");
+					var result = ParseVertices(window.rope1, window.rope1Mtl);
+					var rope1 = GPU.CreateObject(1, Rope, [4, -4, 0], [0,0,0], [1,1,0.2], result);
 					rope1.specularity = 100;
-					
+
 					var ropeRightEnd = [rope1.rightmostBurnPos[0], rope1.rightmostBurnPos[1], rope1.pos[2]];
+					console.log("creating flame...")
 					var flame = GPU.CreateObject(0, Flame, ropeRightEnd, [0,0,0]);
 					flame.StartRope(rope1);
+					flame.currentTnt = tnt;
 
 					var pointLight;
 					for(let i = 0; i < 5; i++)
 					{									
-						console.log("create point light");
-						pointLight = this.CreateObject(0, PointLight, [0+i*8,2, 0], [0,0,0]);						
-						pointLight.color = [0.1, 0.1, 0.1];			
+						console.log("creating point light...");
+						pointLight = this.CreateObject(0, PointLight, [0+i*8,2, 0], [0,0,0]);
+						pointLight.color = [0.1, 0.1, 0.1];
 
 						// var flame = this.CreateObject(0, Flame, [0,0,0], [0,0,0]);
 						// flame.SetParent(pointLight);
@@ -791,7 +873,7 @@
 
 					for(let i = 0; i < 3; i++)
 					{
-						console.log("create spotlight");
+						console.log("creating spotlight...");
 						var light = this.CreateObject(0, SpotLight, [-5+(i*6),-1.2,0], [0.5,0,0]);
 						light.color = [i/3, 0, 0.5];
 						
@@ -833,21 +915,17 @@
 					console.log("parse vertices for sun");	
 					var result = ParseVertices(window.sun, window.sunMtl);
 					var sun = GPU.CreateObject(1, CustomObj, [0.9, 1, 1], [0,0,0], [1,1,1], result);
-					sun.specularity = 100;
+					sun.specularity = 100;					
 
-					// tnt Object
-					console.log("parse vertices for tnt");
-					var result = ParseVertices(window.tnt, window.tntMtl);
-					var tnt = GPU.CreateObject(2, CustomObj, [4, -1, 1], [0,0,0], [1,1,1], result, window.tntTexture);
-
-					console.log("parse vertices for cube");	
+					console.log("parse vertices for cube");
 					var result = ParseVertices(window.cube, window.cubeMtl);
 					var cube = GPU.CreateObject(1, CustomObj, [0.0, -2, 3], [0,0,0], [1,1,1], result, window.spiralTexture, window.spiralNormals);
 					cube.specularity = 100;										
 
-					var flame = this.CreateObject(0, Flame, [3,-3,0], [0,0,0]);
+					//var flame = this.CreateObject(0, Flame, [3,-3,0], [0,0,0]);
 					//TEST Smoke
-					var smoke = this.CreateObject(1, Smoke, [3, -2, 0], [0, 0, 0]);
+					console.log("creating smoke...");
+					var smoke = this.CreateObject(1, Smoke, [2, -3, 0], [0, 0, 0]);
 
 					this.startTime = performance.now();
 					this.loops = 0;
@@ -910,7 +988,7 @@
 					//type 1 = solid
 					//type 2 = trigger										
 					var temp;
-					if(prefab == CustomObj)
+					if(prefab == CustomObj || prefab == Tnt)
 						temp = new prefab(parserData, texture, normalMap, pos, rot, scale); //Yes this dark sorcery will work.
 					else if (prefab == Rope)
 						temp = new prefab(parserData, pos, rot, scale);
@@ -1043,6 +1121,7 @@
 							isRope: u32,
 
 							flamePos: vec3f,
+							isFlashing: u32,
 						};						
 						@group(0) @binding(0) var<uniform> uni: Uniforms;				
 
@@ -1306,9 +1385,9 @@
 
 							vOutput.worldSpace = worldPos3;
 							vOutput.position = PerspectiveProjection(MoveCamera(worldPos4));
-							
-							var flameWorldPos: vec4f = uni.matrix * vec4f(uni.flamePos, 1.0);
-							vOutput.flameWorldPos = flameWorldPos.xyz;
+													
+							//vOutput.flameWorldPos = (uni.matrix * vec4f(uni.flamePos, 1.0)).xyz;
+							vOutput.flameWorldPos = uni.flamePos;
 
 							vOutput.normal = rotate(vec4f(normal, 0.0));
 							vOutput.vectorToCam = myCam.translation - vOutput.worldSpace.xyz;
@@ -1356,10 +1435,7 @@
 							}
 							
 							if(uni.isRope == 1u)
-							{					
-								//so apparently flameWorldPos is ~2 when it should be 4.6 when rope is rotated.
-								//return vec4f(vec3f(fsInput.flameWorldPos.x/4.88), 1);
-
+							{
 								//flameWorldPos moves left. discard pixels as flameWorldPos reaches them
 								if (fsInput.worldSpace.x > fsInput.flameWorldPos.x)
 								{
@@ -1474,7 +1550,12 @@
 								return sm;
 															
 								//return vec4f(1.0, 1.0, 1.0, 0.5);
-							}												
+							}
+
+							if(uni.isFlashing == 1u)
+							{
+								return vec4f(1);
+							}
 
 							var textureUse : f32;
 							textureUse = f32(uni.usingTexture);
@@ -1668,7 +1749,7 @@
 						depthStencil: {
 							format: "depth24plus-stencil8",
 							depthWriteEnabled: true,
-							depthCompare: "less",							
+							depthCompare: "less-equal",
 						},						
 					});
 					console.log("Created pipeline");			

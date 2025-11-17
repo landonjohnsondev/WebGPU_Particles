@@ -132,8 +132,7 @@ class GameObject
 			}
 			sortedPositions.push([positions[maxPosIdx][0], positions[maxPosIdx][1], positions[maxPosIdx][2]]);
 			positionsUsed[maxPosIdx] = true;
-		}
-		console.log("positions sorted by x: " + sortedPositions);
+		}		
 		return sortedPositions;			
 	}
 				
@@ -385,7 +384,7 @@ class Light extends GameObject
 			entries: 
 			[				
 				{ binding: 0, resource: { buffer: GPU.dummyUniformBuffer}},
-				{ binding: 1, resource: { buffer: GPU.lightBuffer}},							
+				{ binding: 1, resource: { buffer: GPU.lightBuffer}},					
 			],
 		});
 
