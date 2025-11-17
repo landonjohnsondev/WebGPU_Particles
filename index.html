@@ -763,7 +763,7 @@
 
 					console.log("parse vertices for rope");					
 					var result = ParseVertices(window.rope, window.ropeMtl);
-					//something with local scale is preventing the rope speed from being correct
+					//when x local scale is changed, the flame speed isn't correct for some reason
 					var rope1 = this.CreateObject(1, Rope, [0,0,-0.5], [0,0,0], [1, 0.1, 0.1], result);
 					rope1.specularity = 100;
 					
