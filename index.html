@@ -43,7 +43,7 @@
 					this.curDir = -1;
 					this.moveSpeed = 0.1;
 
-					this.uniformBufferSize = 160;
+					this.uniformBufferSize = 176;
 					this.uniformBuffer = GPU.device.createBuffer({
 						label: 'uniformBuffer',
 						size: this.uniformBufferSize,
@@ -192,7 +192,7 @@
 
 					this.specularity = 1;
 
-					this.uniformBufferSize = 168;
+					this.uniformBufferSize = 176;
 					this.uniformBuffer = GPU.device.createBuffer({
 						label: 'uniformBuffer',
 						size: this.uniformBufferSize,
@@ -343,7 +343,7 @@
 				{
 					super(pos, rot, scale);	
 
-					this.uniformBufferSize = 160;
+					this.uniformBufferSize = 176;
 					this.uniformBuffer = GPU.device.createBuffer({
 						label: 'uniformBuffer',
 						size: this.uniformBufferSize,
@@ -447,7 +447,7 @@
 				{
 					super(pos, rot, scale);	
 
-					this.uniformBufferSize = 160;
+					this.uniformBufferSize = 176;
 					this.uniformBuffer = GPU.device.createBuffer({
 						label: 'uniformBuffer',
 						size: this.uniformBufferSize,
@@ -575,10 +575,15 @@
 					}
 					
 					if(this.currentRope == undefined)					
-					{
-						GPU.DestroyObject(this.id);	
+					{						
 						this.currentTnt.StartFlashing(0.15);
+						GPU.DestroyObject(this.id);
 					}				
+					else
+					{					
+						//need to use rope's uniform buffer so that isRope in fragment shader has access to flame pos
+						GPU.device.queue.writeBuffer(this.currentRope.uniformBuffer, 144, new Float32Array(this.pos));
+					}
 				}
 											
 				Render(commandPass)
@@ -706,14 +711,7 @@
 				Render(commandPass)
 				{
 					commandPass.setBindGroup(0, this.mainBindGroup);
-					commandPass.setBindGroup(2, this.textureBindGroup);
-				
-					//update burnPos in shader
-					if(this.currentFlame != undefined)
-					{
-						//console.log("writing flamePos " + this.currentFlame.pos + " to shader");						
-						GPU.device.queue.writeBuffer(this.uniformBuffer, 144, new Float32Array(this.currentFlame.pos));
-					}
+					commandPass.setBindGroup(2, this.textureBindGroup);									
 
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
 						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
@@ -744,7 +742,21 @@
 					this.isFlashing = false;
 
 					//set usingTexture to true
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 112, new Uint32Array([1]));		
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 112, new Uint32Array([1]));								
+
+					//initialize explodePos in shader to super far pos, otherwise it is 0,0,0
+					let dummmyPos = [-9999, -9999, -9999];					
+					this.SetExplodePos(dummmyPos);																				
+				}
+
+				SetExplodePos(pos)
+				{
+					for(var i in GPU.Solid)
+						GPU.device.queue.writeBuffer(GPU.Solid[i].uniformBuffer, 160, new Float32Array(pos));
+					for(var i in GPU.Trigger)
+						GPU.device.queue.writeBuffer(GPU.Trigger[i].uniformBuffer, 160, new Float32Array(pos));
+
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 160, new Float32Array(pos));			
 				}
 
 				Update()
@@ -764,9 +776,10 @@
 					{
 						this.explodeTimer -= (1/60);
 						if(this.explodeTimer < 0)
-						{
-							GPU.DestroyObject(this.id);
+						{							
+							this.SetExplodePos(this.pos);
 							document.getElementById("boom").play();
+							GPU.DestroyObject(this.id);
 						}
 					}
 				}			
@@ -774,7 +787,7 @@
 				StartFlashing(interval)
 				{													
 					//set isFlashing to true
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 156, new Uint32Array([1]));
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 156, new Uint32Array([1]));					
 					this.flashTimer = interval;
 					this.flashInterval = interval;
 					this.isFlashing = true;
@@ -834,24 +847,7 @@
 				async SlowStart()
 				{					
 					//you can specify less parameters than the function defines and JS will still run it
-					var camera = this.CreateObject(0, Camera, [3,-3,-2], [0,0,0]);
-										
-					// tnt Object
-					console.log("parse vertices for tnt");
-					var result = ParseVertices(window.tnt, window.tntMtl);
-					var tnt = GPU.CreateObject(2, Tnt, [4, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
-										
-					// new rope
-					console.log("parse vertices for rope");
-					var result = ParseVertices(window.rope1, window.rope1Mtl);
-					var rope1 = GPU.CreateObject(1, Rope, [4, -4, 0], [0,0,0], [1,1,0.2], result);
-					rope1.specularity = 100;
-
-					var ropeRightEnd = [rope1.rightmostBurnPos[0], rope1.rightmostBurnPos[1], rope1.pos[2]];
-					console.log("creating flame...")
-					var flame = GPU.CreateObject(0, Flame, ropeRightEnd, [0,0,0]);
-					flame.StartRope(rope1);
-					flame.currentTnt = tnt;
+					var camera = this.CreateObject(0, Camera, [3,-3,-2], [0,0,0]);																													
 
 					var pointLight;
 					for(let i = 0; i < 5; i++)
@@ -925,7 +921,24 @@
 					//var flame = this.CreateObject(0, Flame, [3,-3,0], [0,0,0]);
 					//TEST Smoke
 					console.log("creating smoke...");
-					var smoke = this.CreateObject(1, Smoke, [2, -3, 0], [0, 0, 0]);
+					var smoke = this.CreateObject(1, Smoke, [2, -3, 0], [0, 0, 0]);					
+
+					// new rope
+					console.log("parse vertices for rope");
+					var result = ParseVertices(window.rope1, window.rope1Mtl);
+					var rope1 = GPU.CreateObject(1, Rope, [4, -4, 0], [0,0,0], [1,1,0.2], result);
+					rope1.specularity = 100;
+
+					// tnt Object
+					console.log("parse vertices for tnt");
+					var result = ParseVertices(window.tnt, window.tntMtl);
+					var tnt = GPU.CreateObject(2, Tnt, [4, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+
+					var ropeRightEnd = [rope1.rightmostBurnPos[0], rope1.rightmostBurnPos[1], rope1.pos[2]];
+					console.log("creating flame...")
+					var flame = GPU.CreateObject(0, Flame, ropeRightEnd, [0,0,0]);
+					flame.StartRope(rope1);
+					flame.currentTnt = tnt;
 
 					this.startTime = performance.now();
 					this.loops = 0;
@@ -1122,6 +1135,7 @@
 
 							flamePos: vec3f,
 							isFlashing: u32,
+							explodePos: vec3f,
 						};						
 						@group(0) @binding(0) var<uniform> uni: Uniforms;				
 
@@ -1411,6 +1425,7 @@
 						@fragment
 						fn fragmentMain(fsInput: VertexOutput) -> @location(0) vec4f
 						{	
+							//get the early returns out of the way first for better performance
 							if(uni.isFire == 1u)
 							{
 								var v = -1.0 + 2.0 * fsInput.texCoords.xy / 1.0;
@@ -1433,14 +1448,23 @@
 								}
 								return fragColor;
 							}
-							
-							if(uni.isRope == 1u)
+							else if(uni.isRope == 1u)
 							{
 								//flameWorldPos moves left. discard pixels as flameWorldPos reaches them
 								if (fsInput.worldSpace.x > fsInput.flameWorldPos.x)
 								{
 									discard;
 								}
+							}											
+							else if(uni.isFlashing == 1u)
+							{
+								return vec4f(1);
+							}
+
+							//hard coded explosion radius for now, might customize later
+							if(distance(fsInput.worldSpace, uni.explodePos) < 8)
+							{
+								discard;
 							}
 
 							var AMBIENT_TOTAL = fsInput.color * lightSystem.ambient;		
@@ -1461,7 +1485,7 @@
 							if(uni.usingNormalMaps == 1u)
 							{
 								newNormal = normalWS;
-							}							
+							}	
 						
 							var lightPower: vec3f = vec3<f32>(0,0,0); //summation of all light power
 							var specPower: vec3<f32>; //summation of all specularity light power
@@ -1550,12 +1574,7 @@
 								return sm;
 															
 								//return vec4f(1.0, 1.0, 1.0, 0.5);
-							}
-
-							if(uni.isFlashing == 1u)
-							{
-								return vec4f(1);
-							}
+							}							
 
 							var textureUse : f32;
 							textureUse = f32(uni.usingTexture);
@@ -1585,7 +1604,7 @@
 					});										
 					this.uniformBuffer = GPU.device.createBuffer({
 						label: 'dummyUniform',
-						size: 160,
+						size: 176,
 						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 					});
 					//linear vs point sample distance for textures
