@@ -174,7 +174,7 @@
 						this.Ks = parserData[3];
 						this.specularity = parserData[4];						
 					}
-
+					
 					this.vertexBuffer = GPU.device.createBuffer({
 						label: "verticeBuffer",
 						size: this.vertices.byteLength,
@@ -617,7 +617,7 @@
 				{
 					let positions = [];
 					let reachedPath = false;					
-					for(const line of window.pointyRope.split("\n"))
+					for(const line of window.rope.split("\n"))
 					{						
 						if(line.substring(0,6) == "o Vert")					
 							reachedPath = true;																			
@@ -836,8 +836,9 @@
 					sun.specularity = 100;
 
 					// tnt Object
+					console.log("parse vertices for tnt");
 					var result = ParseVertices(window.tnt, window.tntMtl);
-					var tnt = GPU.CreateObject(2, CustomObj, [4, -1, 1], [0,0,0], result, window.tntTexture);
+					var tnt = GPU.CreateObject(2, CustomObj, [4, -1, 1], [0,0,0], [1,1,1], result, window.tntTexture);
 
 					console.log("parse vertices for cube");	
 					var result = ParseVertices(window.cube, window.cubeMtl);
