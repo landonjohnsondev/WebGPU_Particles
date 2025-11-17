@@ -761,10 +761,19 @@
 					//you can specify less parameters than the function defines and JS will still run it
 					var camera = this.CreateObject(0, Camera, [3,-3,-2], [0,0,0]);
 
-					console.log("parse vertices for rope");					
-					var result = ParseVertices(window.rope, window.ropeMtl);
+					console.log("parse vertices for rope");
+					// old rope
+					//var result = ParseVertices(window.rope, window.ropeMtl);
 					//something with local scale is preventing the rope speed from being correct
-					var rope1 = this.CreateObject(1, Rope, [0,0,-0.5], [0,0,0], [1, 0.1, 0.1], result);
+					//var rope1 = this.CreateObject(1, Rope, [0,0,-0.5], [0,0,0], [1, 0.1, 0.1], result);
+					
+					// pointy rope
+					//var result = ParseVertices(window.pointyRope, window.pointyRopeMtl);
+					//var rope1 = this.CreateObject(1, Rope, [0,0,-0.5], [0,0,0], [1, 1, 1], result);
+					
+					// new rope
+					var result = ParseVertices(window.rope1, window.rope1Mtl);
+					var rope1 = GPU.CreateObject(1, Rope, [4, -1, -2], [0,0,0], [1,1,1], result);
 					rope1.specularity = 100;
 					
 					var ropeRightEnd = [rope1.rightmostBurnPos[0], rope1.rightmostBurnPos[1], rope1.pos[2]];
@@ -838,9 +847,9 @@
 					// tnt Object
 					console.log("parse vertices for tnt");
 					var result = ParseVertices(window.tnt, window.tntMtl);
-					var tnt = GPU.CreateObject(2, CustomObj, [4, -1, 1], [0,0,0], [1,1,1], result, window.tntTexture);
+					var tnt = GPU.CreateObject(2, CustomObj, [4, -1, -2], [0,0,0], [1,1,1], result, window.tntTexture);
 
-					console.log("parse vertices for cube");	
+					console.log("parse vertices for cube");
 					var result = ParseVertices(window.cube, window.cubeMtl);
 					var cube = GPU.CreateObject(1, CustomObj, [0.0, -2, 3], [0,0,0], [1,1,1], result, window.spiralTexture, window.spiralNormals);
 					cube.specularity = 100;										
