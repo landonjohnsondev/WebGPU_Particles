@@ -195,7 +195,7 @@ function ParseVertices(fileContent, materialContent)
     }				
 
     floatVertices = new Float32Array(finalVertices);
-    intIndexes = new Uint16Array(finalVerticeIndexes);	        
+    intIndexes = new Uint16Array(finalVerticeIndexes);
     
     // console.log("vertices: " + floatVertices);
     // console.log("indexes: " + intIndexes);

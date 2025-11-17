@@ -19,15 +19,19 @@
 			function FrameUpdate()
 			{				
 				GPU.UpdateAll();
-				GPU.RenderAll();				
+				GPU.RenderAll();
+				averageTime = (performance.now() - GPU.startTime) / GPU.loops;
+				GPU.loops++;
+				// console.log("average loop time: " + averageTime + "ms");
+				// console.log("percentage of full speed: " + ((averageTime*60)/1000));
 				requestAnimationFrame(FrameUpdate);
 			}
 
 			class PointLight extends Light
 			{
-				constructor()
+				constructor(pos, rot, scale)
 				{
-					super();		
+					super(pos, rot, scale);		
 
 					this.pointLightIndex = GPU.numPointLights;
 					GPU.numPointLights++;								
@@ -84,9 +88,9 @@
 
 			class SpotLight extends Light
 			{
-				constructor()
+				constructor(pos, rot, scale)
 				{
-					super();
+					super(pos, rot, scale);
 					this.spotLightIndex = GPU.numSpotLights;
 					GPU.numSpotLights++;
 					GPU.device.queue.writeBuffer(GPU.lightBuffer, 16, new Uint32Array([GPU.numSpotLights]));
@@ -113,9 +117,9 @@
 
 			class DirectionalLight extends Light
 			{
-				constructor()
+				constructor(pos, rot, scale)
 				{
-					super();
+					super(pos, rot, scale);
 
 					this.dirLightIndex = GPU.numDirLights;
 					GPU.numDirLights++;														
@@ -156,9 +160,9 @@
 
 			class CustomObj extends GameObject
 			{
-				constructor(parserData, rawTexture, normalMap)
+				constructor(parserData, rawTexture, normalMap, pos, rot, scale)
 				{
-					super();
+					super(pos, rot, scale);
 
 					if(parserData != undefined)
 					{						
@@ -254,9 +258,9 @@
 
 			class Camera extends GameObject
 			{
-				constructor()
+				constructor(pos, rot, scale)
 				{
-					super();
+					super(pos, rot, scale);
 					this.camBuff = GPU.device.createBuffer({
 						label: 'camBuffer',
 						size: 32,
@@ -335,9 +339,9 @@
 
 			class Smoke extends GameObject
 			{
-				constructor(rawTexture, normalMap)
+				constructor(pos, rot, scale, rawTexture, normalMap)
 				{
-					super();	
+					super(pos, rot, scale);	
 
 					this.uniformBufferSize = 160;
 					this.uniformBuffer = GPU.device.createBuffer({
@@ -439,9 +443,9 @@
 			
 			class Flame extends GameObject
 			{
-				constructor()
+				constructor(pos, rot, scale)
 				{
-					super();	
+					super(pos, rot, scale);	
 
 					this.uniformBufferSize = 160;
 					this.uniformBuffer = GPU.device.createBuffer({
@@ -497,22 +501,41 @@
 						],
 					});
 					
+					this.flameSpeedPerSecond = 1.0;
 					this.camera = this.GetCamera();
+					this.currentRope = undefined;
 					
 					//set isFire to true in the shader
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([1]));
-					//set 
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 128, new Uint32Array([0]));
-				}												
-				
-				Update()
-				{
-					this.ApplySceneGraph();
-					this.timer += (1/60);
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([1]));				
+				}																				
 
-					//make flame face camera for billboarded effect
-					this.localRot[1] = this.camera.rot[1];
-					this.transform.doRotations(this.localRot);
+				SetGoalPos(goalPos)
+				{											
+					this.goalPos = goalPos;
+					this.burnDistance = this.VectorDistance(this.pos, goalPos);
+					//could multiply by speedPerSecond here later
+					this.ropeBurnTime = this.burnDistance / this.flameSpeedPerSecond;
+
+					this.xChangeToGoal = goalPos[0] - this.pos[0];
+					this.yChangeToGoal = goalPos[1] - this.pos[1];
+					this.zChangeToGoal = goalPos[2] - this.pos[2];		
+					
+					// console.log("xChangeToGoal: " + this.xChangeToGoal);
+					// console.log("yChangeToGoal: " + this.yChangeToGoal);
+					// console.log("zChangeToGoal: " + this.zChangeToGoal);
+				}
+
+				//sets currentRope and sets goal pos to rightmost goal vertice found
+				StartRope(rope)
+				{
+					this.currentRope = rope;
+					rope.currentFlame = this;
+
+					let pathPositions = rope.GetSortedPathPositions();		
+					console.log("sorted path positions: " + pathPositions);
+					this.goalPos = pathPositions[pathPositions.length-1];
+					console.log("set goal pos to: " + this.goalPos);
+					this.SetGoalPos(this.goalPos);
 				}
 
 				GetCamera()
@@ -523,11 +546,43 @@
 							return GPU.Visual[i];
 					}
 				}
+
+				Update()
+				{
+					this.ApplySceneGraph();
+					this.timer += (1/60);
+
+					//make flame face camera for billboarded effect
+					this.localRot[1] = this.camera.rot[1];
+					this.transform.doRotations(this.localRot);
+
+					if(this.currentRope == undefined)
+						return;
+
+					if(this.VectorDistance(this.pos, this.goalPos) > 0.01)
+					{
+						//ex: say ropeBurn time is 5 seconds and xChangeToGoal is 10.
+						//x += (1/60) * (10/5), //x changes by 2 every second, moves x by 10 in 5 seconds!
+						this.localPos[0] += (1/60) * (this.xChangeToGoal/this.ropeBurnTime);
+						this.localPos[1] += (1/60) * (this.yChangeToGoal/this.ropeBurnTime);
+						this.localPos[2] += (1/60) * (this.zChangeToGoal/this.ropeBurnTime);				
+					}
+					else if(this.currentRope.parent != null)
+					{							
+						//this logic isn't used currently
+						//for multiple ropes, this transitions to the next rope once the current rope is fully burnt
+						this.StartRope(this.currentRope.parent);
+					}					
+					else
+					{
+						GPU.DestroyObject(this.id);
+					}					
+				}
 											
 				Render(commandPass)
 				{
 					commandPass.setBindGroup(0, this.flameGroup);
-					commandPass.setBindGroup(2, this.dummyTextureGroup);
+					commandPass.setBindGroup(2, this.dummyTextureGroup);					
 
 					//The reason for the timer issue is that every object uses its own uniform buffer, which sets timer to 0					
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));
@@ -546,41 +601,104 @@
 
 			class Rope extends CustomObj
 			{
-				constructor(parserData)
+				constructor(parserData, pos, rot, scale)
 				{
-					super(parserData);
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 132, new Uint32Array([1])); //set isRope to true					
+					super(parserData, undefined, undefined, pos, rot, scale);
+					//set isRope to true
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 132, new Uint32Array([1])); 					
+																					
+					this.burnPositions = this.GetRopeEdges();
+					this.leftmostBurnPos = this.burnPositions[0];
+					this.rightmostBurnPos = this.burnPositions[1];										
+					this.currentFlame = undefined;					
+				}				
 
-					let edges = this.GetRopeEdges();
-					this.leftmostRopeX = edges[0];					
-					this.rightmostRopeX = edges[1];
-					this.currentBurnX = this.rightmostRopeX;
-					this.burnDistance = this.rightmostRopeX - this.leftmostRopeX;
-					this.ropeBurnTime = 5;
+				GetSortedPathPositions()
+				{
+					let positions = [];
+					let reachedPath = false;					
+					for(const line of window.pointyRope.split("\n"))
+					{						
+						if(line.substring(0,6) == "o Vert")					
+							reachedPath = true;																			
+
+						if(reachedPath && line[0] == "v")
+						{
+							let position = line.substring(2).split(' ');
+
+							position[0] *= this.localScale[0];
+							position[1] *= this.localScale[1];
+							position[2] *= this.localScale[2];
+							
+							position[0] += this.pos[0];
+							position[1] += this.pos[1];
+							position[2] += this.pos[2];							
+
+							position[0] *= math.cos(this.rot[2]);
+							//THIS WILL BREAK LATER IF POSITION[0] IS NOT THE HALF LENGTH OF THE ROPE
+							position[1] = position[0] * math.tan(this.rot[2]);
+
+							positions.push([position[0], position[1], position[2]]);
+							//console.log("path position after trig: " + position);
+						}
+					}
+					positions = this.SortByX(positions);
+					return positions;
 				}
-				
+								
 				GetRopeEdges()
 				{
-					let leftmostX = 0;
-					let rightmostX = 0;
-					let minX = 9999;
-					let maxX = -9999;
+					let leftmostPos = [9999, 0, 0];
+					let rightmostPos = [-9999, 0, 0];									
 					for(let i = 0; i < this.vertices.length; i += GPU.vertexStride)
-					{
-						if(this.vertices[i] < leftmostX)
-							leftmostX = this.vertices[i];
-						if(this.vertices[i] > rightmostX)
-							rightmostX = this.vertices[i];
-					}					
-					return [leftmostX, rightmostX];
+					{									
+						if(this.vertices[i] < leftmostPos[0])
+						{
+							leftmostPos[0] = this.vertices[i];
+							leftmostPos[1] = this.vertices[i+1];
+							leftmostPos[2] = this.vertices[i+2];
+						}
+						if(this.vertices[i] > rightmostPos[0])
+						{
+							rightmostPos[0] = this.vertices[i];
+							rightmostPos[1] = this.vertices[i+1];
+							rightmostPos[2] = this.vertices[i+2];
+						}						
+					}
+
+					leftmostPos[0] *= this.localScale[0];
+					leftmostPos[1] *= this.localScale[1];
+					leftmostPos[2] *= this.localScale[2];
+
+					leftmostPos[0] += this.pos[0];
+					leftmostPos[1] += this.pos[1];
+					leftmostPos[2] += this.pos[2];	
+					
+					leftmostPos[0] *= math.cos(this.rot[2]);
+					leftmostPos[1] = leftmostPos[0] * math.tan(this.rot[2]);
+
+					rightmostPos[0] += this.pos[0];
+					rightmostPos[1] += this.pos[1];
+					rightmostPos[2] += this.pos[2];
+
+					rightmostPos[0] *= this.localScale[0];
+					rightmostPos[1] *= this.localScale[1];
+					rightmostPos[2] *= this.localScale[2];
+															
+					rightmostPos[0] *= math.cos(this.rot[2]);
+					//tan(theta) = y/x, y = x * tan(theta), x = halfLength of rope
+					rightmostPos[1] = rightmostPos[0] * math.tan(this.rot[2]);
+					
+					console.log("leftmost actual rope pos: " + leftmostPos);
+					console.log("rightmost actual rope pos: " + rightmostPos);
+					
+					this.ropeLength = this.localScale[0] * (rightmostPos[0] - leftmostPos[0]);
+					return [leftmostPos, rightmostPos];
 				}				
 
 				Update()
 				{
-					this.ApplySceneGraph();
-					// ex: burnDist = 10, burnTime = 5, 2 change per second, 2 * 1/60 = change per frame
-					if(this.currentBurnX > this.leftmostRopeX)
-						this.currentBurnX -= (1/60) * (this.burnDistance/this.ropeBurnTime);
+					this.ApplySceneGraph();					
 				}
 
 				Render(commandPass)
@@ -588,7 +706,9 @@
 					commandPass.setBindGroup(0, this.mainBindGroup);
 					commandPass.setBindGroup(2, this.textureBindGroup);
 				
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 144, new Float32Array([this.currentBurnX, 1, this.pos[2]])); //update burnPos in shader
+					//update burnPos in shader
+					if(this.currentFlame != undefined)																
+						GPU.device.queue.writeBuffer(this.uniformBuffer, 144, new Float32Array(this.currentFlame.pos));					
 
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
 						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
@@ -641,19 +761,22 @@
 					//you can specify less parameters than the function defines and JS will still run it
 					var camera = this.CreateObject(0, Camera, [3,-3,-2], [0,0,0]);
 
-					console.log("parse vertices for rope");
-					var result = ParseVertices(window.rope, window.ropeMtl);	
-					var rope = this.CreateObject(1, Rope, [0,0,-0.5], [0,0,0], result);
-					rope.specularity = 100;
-					rope.localScale[0] *= 1.5;
-					rope.localScale[1] *= 0.2;					
-					rope.localScale[2] *= 0.2;
+					console.log("parse vertices for rope");					
+					var result = ParseVertices(window.rope, window.ropeMtl);
+					//something with local scale is preventing the rope speed from being correct
+					var rope1 = this.CreateObject(1, Rope, [0,0,-0.5], [0,0,0], [1, 0.1, 0.1], result);
+					rope1.specularity = 100;
+					
+					var ropeRightEnd = [rope1.rightmostBurnPos[0], rope1.rightmostBurnPos[1], rope1.pos[2]];
+					var flame = GPU.CreateObject(0, Flame, ropeRightEnd, [0,0,0]);
+					flame.StartRope(rope1);
 
 					var pointLight;
 					for(let i = 0; i < 5; i++)
-					{												
+					{									
+						console.log("create point light");
 						pointLight = this.CreateObject(0, PointLight, [0+i*8,2, 0], [0,0,0]);						
-						pointLight.color = [0.1, 0.1, 0.1];						
+						pointLight.color = [0.1, 0.1, 0.1];			
 
 						// var flame = this.CreateObject(0, Flame, [0,0,0], [0,0,0]);
 						// flame.SetParent(pointLight);
@@ -668,85 +791,63 @@
 
 					for(let i = 0; i < 3; i++)
 					{
+						console.log("create spotlight");
 						var light = this.CreateObject(0, SpotLight, [-5+(i*6),-1.2,0], [0.5,0,0]);
 						light.color = [i/3, 0, 0.5];
 						
-						console.log("parse vertices for spotlight");
-						var result = ParseVertices(window.spotlight, window.spotlightMtl);
-						var spotlight = GPU.CreateObject(1, CustomObj, [i*2, 2, 1.5], [0,0,0], result);
-						spotlight.specularity = 100;
-						spotlight.SetParent(light);
-						spotlight.localScale[0] *= 0.5;
-						spotlight.localScale[1] *= 0.5;
-						spotlight.localScale[2] *= 0.5;
+						// console.log("parse vertices for flyingSpotlight");
+						// var result = ParseVertices(window.spotlight, window.spotlightMtl);
+						// var spotlight = GPU.CreateObject(1, CustomObj, [i*2, 2, 1.5], [0,0,0], [1,1,1], result);
+						// spotlight.specularity = 100;
+						// spotlight.SetParent(light);
+						// spotlight.localScale[0] *= 0.5;
+						// spotlight.localScale[1] *= 0.5;
+						// spotlight.localScale[2] *= 0.5;
 					}		
 					var l = this.CreateObject(0, DirectionalLight, [5, 5.0, 0], [0,3,0]);
 					l.color = [0.15,0.15,0.15];
 
 					console.log("parse vertices for ground");
 					var result = ParseVertices(window.ground, window.groundMtl);
-					var ground = GPU.CreateObject(1, CustomObj, [0,-5.5,1.1], [0,0,0], result, window.grassTexture, window.grassNormals);
-					ground.localScale = [15,15,15];
+					var ground = GPU.CreateObject(1, CustomObj, [0,-5.5,1.1], [0,0,0], [15,15,15], result, window.grassTexture, window.grassNormals);					
 					ground.specularity = 105;
 
 					console.log("parse vertices for house");
 					var result = ParseVertices(window.house, window.houseMtl);
-					var house = GPU.CreateObject(1, CustomObj, [0.2,0.2,0.2], [0,0,0], result, window.woodTexture, window.woodNormals);
+					var house = GPU.CreateObject(1, CustomObj, [0.2,0.2,0.2], [0,0,0], [1,1,1], result, window.woodTexture, window.woodNormals);
 					house.SetParent(ground);
 					house.specularity = 100;
-		
-					//texture shows up on each tree, but nothing else
+							
 					console.log("parse vertices for tree");
 					var result = ParseVertices(window.tree, window.treeMtl);
-					var tree = GPU.CreateObject(1, CustomObj, [0.8,0.25,0], [0,0,0], result, window.treeTexture, window.treeNormals);
+					var tree = GPU.CreateObject(1, CustomObj, [0.8,0.25,0], [0,0,0], [1,1,1], result, window.treeTexture, window.treeNormals);
 					tree.SetParent(ground);
 					tree.specularity = 100;
 
 					console.log("parse vertices for sphereTree");
 					var result = ParseVertices(window.sphereTree, window.sphereTreeMtl);
-					var sphereTree = GPU.CreateObject(1, CustomObj, [-0.3, 0.19, -0.4], [0,0,0], result, window.treeTexture, window.treeNormals);
-					sphereTree.localScale[0] *= 0.2;
-					sphereTree.localScale[1] *= 0.2;
-					sphereTree.localScale[2] *= 0.2;
+					var sphereTree = GPU.CreateObject(1, CustomObj, [-0.3, 0.19, -0.4], [0,0,0], [0.2,0.2,0.2], result, window.treeTexture, window.treeNormals);					
 					sphereTree.SetParent(ground);
 					sphereTree.specularity = 100;
-					
-					//would need an array of models or lights or something so shadows are correct
+										
 					console.log("parse vertices for sun");	
 					var result = ParseVertices(window.sun, window.sunMtl);
-					var sun = GPU.CreateObject(1, CustomObj, [0.9, 1, 1], [0,0,0], result);
+					var sun = GPU.CreateObject(1, CustomObj, [0.9, 1, 1], [0,0,0], [1,1,1], result);
 					sun.specularity = 100;
 
 					console.log("parse vertices for cube");	
 					var result = ParseVertices(window.cube, window.cubeMtl);
-					var cube = GPU.CreateObject(1, CustomObj, [0.0, -2, 3], [0,0,0], result, window.spiralTexture, window.spiralNormals);
-					cube.specularity = 100;					
+					var cube = GPU.CreateObject(1, CustomObj, [0.0, -2, 3], [0,0,0], [1,1,1], result, window.spiralTexture, window.spiralNormals);
+					cube.specularity = 100;										
 
 					var flame = this.CreateObject(0, Flame, [3,-3,0], [0,0,0]);
 					//TEST Smoke
 					var smoke = this.CreateObject(1, Smoke, [3, -2, 0], [0, 0, 0]);
 
+					this.startTime = performance.now();
+					this.loops = 0;
 					requestAnimationFrame(FrameUpdate);
-				}
-
-				SetNormalMaps(useNormals)
-				{
-					console.log("calling set normalmaps: " + useNormals);
-					if(useNormals)
-					{						
-						for(var i in this.Solid)
-							GPU.device.queue.writeBuffer(this.Solid[i].uniformBuffer, 116, new Uint32Array([1]));
-						for(var i in this.Trigger)
-							GPU.device.queue.writeBuffer(this.Trigger[i].uniformBuffer, 116, new Uint32Array([1]));
-					}
-					else
-					{						
-						for(var i in this.Solid)
-							GPU.device.queue.writeBuffer(this.Solid[i].uniformBuffer, 116, new Uint32Array([0]));
-						for(var i in this.Trigger)
-							GPU.device.queue.writeBuffer(this.Trigger[i].uniformBuffer, 116, new Uint32Array([0]));
-					}
-				}
+				}				
 				
 				UpdateAll()
 				{
@@ -798,24 +899,23 @@
 					this.device.queue.submit([this.mainCommandBuffer]);
 				}				
 				
-				CreateObject(type, prefab, pos, rot, parserData, texture, normalMap)
+				CreateObject(type, prefab, pos, rot, scale, parserData, texture, normalMap)
 				{			
 					//type 0 = visual
 					//type 1 = solid
-					//type 2 = trigger
-					var temp = new prefab(parserData, texture, normalMap); //Yes this dark sorcery will work.
+					//type 2 = trigger										
+					var temp;
+					if(prefab == CustomObj)
+						temp = new prefab(parserData, texture, normalMap, pos, rot, scale); //Yes this dark sorcery will work.
+					else if (prefab == Rope)
+						temp = new prefab(parserData, pos, rot, scale);
+					else
+						temp = new prefab(pos, rot, scale);
+
 					var id = "ID"+this.ObjectCounter;
 					this.ObjectCounter++;
 					temp.id = id;
-					temp.prefab = prefab;
-
-					for(let i = 0; i < 3; i ++)
-					{
-						temp.pos[i] = pos[i];
-						temp.localPos[i] = pos[i];
-						temp.rot[i] = rot[i];
-						temp.localRot[i] = rot[i];
-					}										
+					temp.prefab = prefab;								
 
 					switch(type)
 					{
@@ -937,7 +1037,7 @@
 							isSmoke: u32,
 							isRope: u32,
 
-							burnPos: vec3f,
+							flamePos: vec3f,
 						};						
 						@group(0) @binding(0) var<uniform> uni: Uniforms;				
 
@@ -952,7 +1052,7 @@
 							@location(5) shiny: f32,
 							@location(6) worldSpace: vec3f,
 							@location(7) vectorToCam: vec3f, //for specularity									
-							@location(8) burnWorld: vec3f,
+							@location(8) flameWorldPos: vec3f,
 						};				
 
 						struct PointLight
@@ -1191,9 +1291,9 @@
 							return vec4<f32>(color, alpha);
 						}
 						
-						//the parameters correspond to the vertexBufferLayout object below						
+						//the parameters correspond to the vertexBufferLayout object						
 						@vertex						
-						fn vertexMain(@builtin(vertex_index) vertexIndex: u32, @location(0) pos: vec3f, @location(1) col: vec3f, @location(2) texCoords: vec2f, @location(3) normal: vec3f, @location(4) Ka: vec3f, @location(5) Ks: vec3f, @location(6) shiny: f32) -> VertexOutput
+						fn vertexMain(@location(0) pos: vec3f, @location(1) col: vec3f, @location(2) texCoords: vec2f, @location(3) normal: vec3f, @location(4) Ka: vec3f, @location(5) Ks: vec3f, @location(6) shiny: f32) -> VertexOutput
 						{
 							var vOutput: VertexOutput;
 							let worldPos4: vec4<f32> = uni.matrix * vec4f(pos, 1.0);
@@ -1202,8 +1302,8 @@
 							vOutput.worldSpace = worldPos3;
 							vOutput.position = PerspectiveProjection(MoveCamera(worldPos4));
 							
-							var burnWorld: vec4f = uni.matrix * vec4f(uni.burnPos, 1.0);
-							vOutput.burnWorld = burnWorld.xyz;
+							var flameWorldPos: vec4f = uni.matrix * vec4f(uni.flamePos, 1.0);
+							vOutput.flameWorldPos = flameWorldPos.xyz;
 
 							vOutput.normal = rotate(vec4f(normal, 0.0));
 							vOutput.vectorToCam = myCam.translation - vOutput.worldSpace.xyz;
@@ -1252,8 +1352,11 @@
 							
 							if(uni.isRope == 1u)
 							{					
-								//burnWorld moves left. discard pixels as burnWorld reaches them
-								if (fsInput.worldSpace.x > fsInput.burnWorld.x)
+								//so apparently flameWorldPos is ~2 when it should be 4.6 when rope is rotated.
+								//return vec4f(vec3f(fsInput.flameWorldPos.x/4.88), 1);
+
+								//flameWorldPos moves left. discard pixels as flameWorldPos reaches them
+								if (fsInput.worldSpace.x > fsInput.flameWorldPos.x)
 								{
 									discard;
 								}
@@ -1551,11 +1654,9 @@
 								}]
 						},
 						primitive:
-						{
-							//every 2 seconds with just this, though half flame
+						{							
 							topology: "triangle-list",
-							cullMode: "none",
-							//every 3.5 seconds with this, full flame
+							cullMode: "none",							
 							// topology: "triangle-strip",
 							// stripIndexFormat: "uint16",
 						},						
