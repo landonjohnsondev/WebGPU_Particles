@@ -329,15 +329,18 @@
 				{
 					super(pos, rot, scale);				
 
+					let maxDim = 1;
+					let maxUV = 2;
 					//these triangles form a square, which is the area for the fire "texture"					
+					
 					this.vertices = new Float32Array([
-						 -0.5,0.5,0, 0,0,0, -1, 1, 0,0,0,0,0,0,0,0,0,0,
-						-0.5,-0.5,0, 0,0,0, -1,-1, 0,0,0,0,0,0,0,0,0,0,
-						  0.5,0.5,0, 0,0,0,  1, 1, 0,0,0,0,0,0,0,0,0,0,
+						 -maxDim,maxDim,0, 0,0,0, -maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
+						-maxDim,-maxDim,0, 0,0,0, -maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
+						  maxDim,maxDim,0, 0,0,0,  maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
 						 
-						-0.5,-0.5,0, 0,0,0,  1,-1, 0,0,0,0,0,0,0,0,0,0,
-						 0.5,-0.5,0, 0,0,0, -1,-1, 0,0,0,0,0,0,0,0,0,0,
-						  0.5,0.5,0, 0,0,0, -1, 1, 0,0,0,0,0,0,0,0,0,0,
+						-maxDim,-maxDim,0, 0,0,0,  maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
+						 maxDim,-maxDim,0, 0,0,0, -maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
+						  maxDim,maxDim,0, 0,0,0, -maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
 					]);
 					
 					this.vertexBuffer = GPU.device.createBuffer({
