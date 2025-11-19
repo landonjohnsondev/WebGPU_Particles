@@ -891,6 +891,10 @@
 					var house = GPU.CreateObject(1, CustomObj, [0.2,0.2,0.2], [0,0,0], [1,1,1], result, window.woodTexture, window.woodNormals);
 					house.SetParent(ground);
 					house.specularity = 100;
+					
+					console.log("parse vertices for cube");
+					var result = ParseVertices(window.woodSign, window.woodSignMtl);
+					var woodSign = GPU.CreateObject(1, CustomObj, [1, -4, 3], [0,0,0], [1,1,1], result, window.woodSignTexture/*, window.woodNormals*/);
 							
 					console.log("parse vertices for tree");
 					var result = ParseVertices(window.tree, window.treeMtl);
