@@ -895,9 +895,10 @@
 					house.SetParent(ground);
 					house.specularity = 100;
 					
-					console.log("parse vertices for cube");
+					console.log("parse vertices for wooden sign");
 					var result = ParseVertices(window.woodSign, window.woodSignMtl);
-					var woodSign = GPU.CreateObject(1, CustomObj, [1, -4, 3], [0,0,0], [1,1,1], result, window.woodSignTexture/*, window.woodNormals*/);
+					var woodSign = GPU.CreateObject(1, CustomObj, [-1.5, -5.5, -4], [0,25,0], [1,1,1], result, window.woodSignTexture, window.woodNormals);
+					woodSign.specularity = 120;
 							
 					console.log("parse vertices for tree");
 					var result = ParseVertices(window.tree, window.treeMtl);
