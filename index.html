@@ -400,7 +400,9 @@
 					//console.log("flame timer: " + this.timer);
 					
 					//make flame face camera for billboarded effect
-					this.localRot[1] = this.camera.rot[1];
+					if(this.parent == null)
+						this.localRot[1] = this.camera.rot[1];
+						
 					this.transform.doRotations(this.localRot);
 				}
 
@@ -494,7 +496,7 @@
 					//set isFire to true in the shader
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([1]));			
 
-					this.smoke = GPU.CreateObject(0, Smoke, [0,1,0], [0,0,0]);
+					this.smoke = GPU.CreateObject(1, Smoke, [0,1,0], [0,0,0]);
 					this.smoke.SetParent(this);
 				}																				
 
@@ -863,9 +865,29 @@
 
 					if(this.isFlashing)
 					{
+						// EXPLODING
 						this.explodeTimer -= (1/60);
 						if(this.explodeTimer < 0)
-						{							
+						{						
+							var smoke1 = GPU.CreateObject(
+								1, 
+								Smoke, 
+								[this.pos[0] + math.random() * 10 + 1, 3,this.pos[2] + math.random() * 10 + 1],
+								[0,0,0],
+								[15, 15, 15]);
+							/*var smoke2 = GPU.CreateObject(
+								1, 
+								Smoke, 
+								[this.pos[0] + math.random() * 10 + 1, 3,this.pos[2] + math.random() * 10 + 1],
+								[0,0,0],
+								[15, 15, 15]);
+							var smoke3 = GPU.CreateObject(
+								1, 
+								Smoke, 
+								[this.pos[0] + math.random() * 10 + 1, 3,this.pos[2] + math.random() * 10 + 1],
+								[0,0,0],
+								[15, 15, 15]);*/
+
 							this.SetExplodePos(this.pos);
 							this.LaunchObjects();
 							document.getElementById("boom").play();
@@ -1113,6 +1135,8 @@
 						temp = new prefab(parserData, texture, normalMap, pos, rot, scale); //Yes this dark sorcery will work.
 					else if (prefab == Rope)
 						temp = new prefab(parserData, pos, rot, scale);
+					else if (prefab == Smoke)
+						temp = new prefab(pos, rot, scale);
 					else
 						temp = new prefab(pos, rot, scale);
 
