@@ -325,12 +325,6 @@
 						this.localPos[1] += this.strafeSpeed * this.transform.right[1];
 						this.localPos[2] += this.strafeSpeed * this.transform.right[2];
 					}
-
-					// if(GPU.CheckKey('C'))
-					// {
-					// 	var smoke = GPU.CreateObject(1, Smoke, [math.random()*1.5,-3,0], [0,1,0], [1,1,1]);
-					// 	console.log("made smoke " + smoke + " at " + smoke.pos);
-					// }
 				}								
 
 				Render(commandPass)
@@ -349,8 +343,7 @@
 
 					let maxDim = 1;
 					let maxUV = 2;
-					//these triangles form a square, which is the area for the fire "texture"					
-					
+					//these triangles form a square, which is the area for the fire "texture"				
 					this.vertices = new Float32Array([
 						 -maxDim,maxDim,0, 0,0,0, -maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
 						-maxDim,-maxDim,0, 0,0,0, -maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
@@ -500,6 +493,9 @@
 					
 					//set isFire to true in the shader
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([1]));			
+
+					var smoke = GPU.CreateObject(0, Smoke, [0,1,0], [0,0,0]);
+					smoke.SetParent(this);
 				}																				
 
 				SetGoalPos(goalPos)
@@ -725,7 +721,8 @@
 							if(GPU.CheckKey('E')) 
 							{
 								this.litFire = 1;
-								var flame = GPU.CreateObject(0, Flame, GPU.ropeRightEnd, [0,0,0]);
+								var flame = GPU.CreateObject(0, Flame, GPU.ropeRightEnd, [0,0,0]);								
+
 								flame.StartRope(GPU.rope1);
 								flame.currentTnt = GPU.tnt;
 							}
@@ -1692,7 +1689,7 @@
 								return sm;
 															
 								//return vec4f(1.0, 1.0, 1.0, 0.5);
-							}						
+							}	
 
 							var textureUse : f32;
 							textureUse = f32(uni.usingTexture);
