@@ -494,8 +494,8 @@
 					//set isFire to true in the shader
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([1]));			
 
-					var smoke = GPU.CreateObject(0, Smoke, [0,1,0], [0,0,0]);
-					smoke.SetParent(this);
+					this.smoke = GPU.CreateObject(0, Smoke, [0,1,0], [0,0,0]);
+					this.smoke.SetParent(this);
 				}																				
 
 				SetGoalPos(goalPos)
@@ -565,6 +565,7 @@
 					if(this.currentRope == undefined)					
 					{						
 						this.currentTnt.StartFlashing();
+						GPU.DestroyObject(this.smoke.id);
 						GPU.DestroyObject(this.id);
 					}				
 					else
