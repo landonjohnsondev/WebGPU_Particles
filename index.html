@@ -325,6 +325,12 @@
 						this.localPos[1] += this.strafeSpeed * this.transform.right[1];
 						this.localPos[2] += this.strafeSpeed * this.transform.right[2];
 					}
+
+					// if(GPU.CheckKey('C'))
+					// {
+					// 	var smoke = GPU.CreateObject(1, Smoke, [math.random()*1.5,-3,0], [0,1,0], [1,1,1]);
+					// 	console.log("made smoke " + smoke + " at " + smoke.pos);
+					// }
 				}								
 
 				Render(commandPass)
@@ -379,7 +385,7 @@
 					({
 						layout: GPU.pipeline.getBindGroupLayout(2),
 						label: 'customObjTextureGroup',
-						entries:
+						entries:	
 						[																
 							{ binding: 0, resource: this.textureObj.createView() },							
 							{ binding: 1, resource: GPU.sampler },
@@ -399,9 +405,9 @@
 					this.timer += (1/60);		
 					
 					//console.log("flame timer: " + this.timer);
-
+					
 					//make flame face camera for billboarded effect
-					this.localRot[1] = this.camera.rot[1];	
+					this.localRot[1] = this.camera.rot[1];
 					this.transform.doRotations(this.localRot);
 				}
 
@@ -427,7 +433,7 @@
 						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
 						this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
 						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
-					]));
+					]));					
 					
 					commandPass.setVertexBuffer(0, this.vertexBuffer);
 					commandPass.draw(6,1,0,0);
@@ -785,6 +791,7 @@
 					let initialOffset = 176;
 					for(let j = 0; j < tnts.length; j++)
 					{						
+						//tntIdx represents the tnt number it is, like 0th tnt, 1st tnt, etc
 						for(var i in GPU.Visual)
 							GPU.device.queue.writeBuffer(GPU.Visual[i].uniformBuffer, initialOffset + (16 * tnts[j].tntIdx), new Float32Array(pos));
 						for(var i in GPU.Solid)
@@ -813,25 +820,25 @@
 					for(let i = 0; i < launchables.length; i++)
 					{
 						var obj = launchables[i];
-						if((obj instanceof Tnt || obj instanceof Camera) && obj != this)
-						{							
-							var distToObj = this.VectorDistance(this.pos, obj.pos);
-							var dirToObj = [];
-							dirToObj[0] = obj.pos[0] - this.pos[0];
-							dirToObj[1] = obj.pos[1] - this.pos[1];
-							dirToObj[2] = obj.pos[2] - this.pos[2];
-							dirToObj = this.Normalize(dirToObj);
-							
-							obj.vel[0] = ((dirToObj[0] * 80) / distToObj) * (1/60);
-							obj.vel[1] = ((dirToObj[1] * 80) / distToObj) * (1/60);
-							obj.vel[2] = ((dirToObj[2] * 80) / distToObj) * (1/60);
+						if(obj == this)
+							continue;
+											
+						var distToObj = this.VectorDistance(this.pos, obj.pos);
+						var dirToObj = [];
+						dirToObj[0] = obj.pos[0] - this.pos[0];
+						dirToObj[1] = obj.pos[1] - this.pos[1];
+						dirToObj[2] = obj.pos[2] - this.pos[2];
+						dirToObj = this.Normalize(dirToObj);
+						
+						obj.vel[0] = ((dirToObj[0] * 80) / distToObj) * (1/60);
+						obj.vel[1] = ((dirToObj[1] * 80) / distToObj) * (1/60);
+						obj.vel[2] = ((dirToObj[2] * 80) / distToObj) * (1/60);
 
-							if(obj instanceof Tnt)
-							{
-								obj.StartFlashing();
-								obj.explodeTimer /= 2;
-							}							
-						}
+						if(obj instanceof Tnt)
+						{
+							obj.StartFlashing();
+							obj.explodeTimer /= 2;
+						}													
 					}					
 				}
 
@@ -1000,7 +1007,9 @@
 					//TEST Smoke					
 					//why does smoke not move up when i position it higher and higher with certain scales?
 					console.log("creating smoke...");
-					var smoke = this.CreateObject(1, Smoke, [2, -3, 0], [0, 1, 0], [1,1,1]);
+					// var smoke = this.CreateObject(1, Smoke, [2, -2, -1], [0, 1, 0], [1,1,1]);
+					// var smoke2 = this.CreateObject(1, Smoke, [1.5, -3, 0], [0, 1, 0], [1,1,1]);
+					// var smok3 = this.CreateObject(1, Smoke, [1, -3, 0], [0, 1, 0], [1,1,1]);
 
 					// new rope
 					console.log("parse vertices for rope");
@@ -1016,7 +1025,7 @@
 					var tnt2 = GPU.CreateObject(1, Tnt, [-6, -2, 0], [0,0,0], [1,1,1], result, window.tntTexture);
 					var tnt3 = GPU.CreateObject(1, Tnt, [10, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
 
-					this.ropeRightEnd = [this.rope1.rightmostBurnPos[0], this.rope1.rightmostBurnPos[1], this.rope1.pos[2]];							
+					this.ropeRightEnd = [this.rope1.rightmostBurnPos[0], this.rope1.rightmostBurnPos[1], this.rope1.pos[2]];						
 
 					this.startTime = performance.now();
 					this.loops = 0;
@@ -1500,7 +1509,7 @@
 							let worldPos3: vec3<f32> = worldPos4.xyz;																															
 
 							vOutput.worldSpace = worldPos3;
-							vOutput.position = PerspectiveProjection(MoveCamera(worldPos4));																				
+							vOutput.position = PerspectiveProjection(MoveCamera(worldPos4));																			
 							//may need an array of flame positions later
 							vOutput.flameWorldPos = uni.flamePos;
 
@@ -1525,14 +1534,7 @@
 												
 						@fragment
 						fn fragmentMain(fsInput: VertexOutput) -> @location(0) vec4f
-						{
-							//explodePos[0] at start = white, white, white
-							//explodePos[1] at start = white, white, white
-							//explodePos[2] at start = white, white, none
-
-							//explodePos[2].x is 9999, y is around 6
-							//return vec4f(vec3f(uni.explodePos[0].x/3), 1);							
-
+						{							
 							//get the early returns out of the way first for better performance
 							if(uni.isFire == 1u)
 							{
@@ -1570,9 +1572,14 @@
 							}
 							
 							for(var i = 0u; i < 3u; i++)
-							{
-								//hard coded explosion radius for now, might customize later
-								if(distance(fsInput.worldSpace, uni.explodePos[i]) < 8 && uni.isLaunchable == 0u)
+							{								
+								if(uni.isLaunchable == 1u || uni.isSmoke == 1u)
+								{
+									break;
+								}
+
+								// hard coded explosion radius for now, might customize later
+								if(distance(fsInput.worldSpace, uni.explodePos[i]) < 8)
 								{
 									discard;
 								}
@@ -1670,7 +1677,7 @@
 								dirLight += IL * light.color.xyz;
 							}																																					
 
-							if (uni.isSmoke == 1u) 
+							if (uni.isSmoke == 1u)
 							{
 								var v = -1.0 + 2.0 * fsInput.texCoords.xy;
 								var org = vec3<f32>(0.0, -2.0, 4.0);
@@ -1685,7 +1692,7 @@
 								return sm;
 															
 								//return vec4f(1.0, 1.0, 1.0, 0.5);
-							}							
+							}						
 
 							var textureUse : f32;
 							textureUse = f32(uni.usingTexture);
