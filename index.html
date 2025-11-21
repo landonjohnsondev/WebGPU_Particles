@@ -265,12 +265,24 @@
 					this.strafeSpeed = 0.06;
 					this.rotSpeed = 0.04;
 					this.elevateSpeed = 0.06;
+
+					//set isLaunchable to true
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 160, new Uint32Array([1]));
+					this.vel = [0,0,0];
 				}
 
 				Update()
 				{
-					this.ApplySceneGraph();										
+					this.ApplySceneGraph();
 					this.transform.doRotations(this.rot);
+
+					this.localPos[0] += this.vel[0];
+					this.localPos[1] += this.vel[1];
+					this.localPos[2] += this.vel[2];										
+
+					this.vel[0] *= 0.98;
+					this.vel[1] *= 0.98;
+					this.vel[2] *= 0.98;
 
 					if(GPU.CheckKey('D'))
 						this.rot[1] += this.rotSpeed;
@@ -481,13 +493,13 @@
 					this.currentTnt = undefined;
 					
 					//set isFire to true in the shader
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([1]));				
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([1]));			
 				}																				
 
 				SetGoalPos(goalPos)
 				{											
 					this.goalPos = goalPos;
-					console.log("goalPos: " + goalPos);
+					//console.log("goalPos: " + goalPos);
 
 					this.burnDistance = this.VectorDistance(this.pos, goalPos);
 					this.ropeBurnTime = this.burnDistance / this.flameSpeedPerSecond;
@@ -550,7 +562,7 @@
 					
 					if(this.currentRope == undefined)					
 					{						
-						this.currentTnt.StartFlashing(0.15);
+						this.currentTnt.StartFlashing();
 						GPU.DestroyObject(this.id);
 					}				
 					else
@@ -739,45 +751,108 @@
 
 			class Tnt extends CustomObj
 			{
+				static numTnt = 0;
+
 				constructor(parserData, rawTexture, normalMap, pos, rot, scale)
 				{					
 					super(parserData, rawTexture, normalMap, pos, rot, scale);
 					this.flashTimer = 0.0;
-					this.flashInterval = -1;
+					this.flashInterval = 0.15;
 					this.flashOn = 1;
 					this.explodeTimer = 2;
-					this.isFlashing = false;
+					this.isFlashing = false;	
+					Tnt.numTnt++;
+					this.tntIdx = Tnt.numTnt - 1;				
 
 					//set usingTexture to true
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 112, new Uint32Array([1]));								
 
 					//initialize explodePos in shader to super far pos, otherwise it is 0,0,0
-					let dummmyPos = [-9999, -9999, -9999];					
-					this.SetExplodePos(dummmyPos);																				
-				}
+					let dummyPos = [9999, 9999, 9999];
+					this.SetExplodePos(dummyPos);
+										
+					//set isLaunchable to true
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 160, new Uint32Array([1]));
+					this.vel = [0,0,0];
+				}				
 
 				SetExplodePos(pos)
-				{
-					for(var i in GPU.Visual)
-						GPU.device.queue.writeBuffer(GPU.Visual[i].uniformBuffer, 160, new Float32Array(pos));
-					for(var i in GPU.Solid)
-						GPU.device.queue.writeBuffer(GPU.Solid[i].uniformBuffer, 160, new Float32Array(pos));
-					for(var i in GPU.Trigger)
-						GPU.device.queue.writeBuffer(GPU.Trigger[i].uniformBuffer, 160, new Float32Array(pos));
+				{					
+					let tnts = GPU.GetObjectsOfType(Tnt);
+					tnts.push(this); //CreateObject can't add object to lists until after the constructor runs					
+					pos.push(1); //make pos a vec4f to ensure it is 16 bytes long
 
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 160, new Float32Array(pos));
+					let initialOffset = 176;
+					for(let j = 0; j < tnts.length; j++)
+					{						
+						for(var i in GPU.Visual)
+							GPU.device.queue.writeBuffer(GPU.Visual[i].uniformBuffer, initialOffset + (16 * tnts[j].tntIdx), new Float32Array(pos));
+						for(var i in GPU.Solid)
+							GPU.device.queue.writeBuffer(GPU.Solid[i].uniformBuffer, initialOffset + (16 * tnts[j].tntIdx), new Float32Array(pos));
+						for(var i in GPU.Trigger)
+							GPU.device.queue.writeBuffer(GPU.Trigger[i].uniformBuffer, initialOffset + (16 * tnts[j].tntIdx), new Float32Array(pos));
+					}
+
+					GPU.device.queue.writeBuffer(this.uniformBuffer, initialOffset + (16 * this.tntIdx), new Float32Array(pos));
+				}
+
+				LaunchObjects()
+				{
+					//this is after all constructors have ran, so this includes the current tnt
+					let launchables = GPU.GetObjectsOfType(Tnt);
+					let cameras = GPU.GetObjectsOfType(Camera);					
+					launchables.push(cameras[0]);
+					
+					//remove current tnt
+					for(let i = 0; i < launchables.length; i++)
+					{
+						if(launchables[i] == this)
+							launchables.splice(i, 1);
+					}					
+
+					for(let i = 0; i < launchables.length; i++)
+					{
+						var obj = launchables[i];
+						if((obj instanceof Tnt || obj instanceof Camera) && obj != this)
+						{							
+							var distToObj = this.VectorDistance(this.pos, obj.pos);
+							var dirToObj = [];
+							dirToObj[0] = obj.pos[0] - this.pos[0];
+							dirToObj[1] = obj.pos[1] - this.pos[1];
+							dirToObj[2] = obj.pos[2] - this.pos[2];
+							dirToObj = this.Normalize(dirToObj);
+							
+							obj.vel[0] = ((dirToObj[0] * 80) / distToObj) * (1/60);
+							obj.vel[1] = ((dirToObj[1] * 80) / distToObj) * (1/60);
+							obj.vel[2] = ((dirToObj[2] * 80) / distToObj) * (1/60);
+
+							if(obj instanceof Tnt)
+							{
+								obj.StartFlashing();
+								obj.explodeTimer /= 2;
+							}							
+						}
+					}					
 				}
 
 				Update()
 				{
 					this.ApplySceneGraph();
 
+					this.localPos[0] += this.vel[0];
+					this.localPos[1] += this.vel[1];
+					this.localPos[2] += this.vel[2];
+
+					this.vel[0] *= 0.99;
+					this.vel[1] *= 0.99;
+					this.vel[2] *= 0.99;
+
 					this.flashTimer -= (1/60);
 					if(this.flashTimer < 0 && this.isFlashing)
 					{
 						this.flashTimer = this.flashInterval;						
 						(this.flashOn == 0) ? this.flashOn = 1 : this.flashOn = 0;
-						//set usingTexture to true/false
+						//set isFlashing to true/false
 						GPU.device.queue.writeBuffer(this.uniformBuffer, 156, new Uint32Array([this.flashOn]));
 					}					
 
@@ -787,18 +862,18 @@
 						if(this.explodeTimer < 0)
 						{							
 							this.SetExplodePos(this.pos);
+							this.LaunchObjects();
 							document.getElementById("boom").play();
 							GPU.DestroyObject(this.id);
 						}
 					}
 				}			
 
-				StartFlashing(interval)
+				StartFlashing()
 				{													
 					//set isFlashing to true
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 156, new Uint32Array([1]));					
-					this.flashTimer = interval;
-					this.flashInterval = interval;
+					this.flashTimer = this.flashInterval;
 					this.isFlashing = true;
 				}
 				
@@ -923,7 +998,7 @@
 					cube.specularity = 100;										
 
 					//TEST Smoke					
-					//why does smoke not move up when positioned with certain scales?
+					//why does smoke not move up when i position it higher and higher with certain scales?
 					console.log("creating smoke...");
 					var smoke = this.CreateObject(1, Smoke, [2, -3, 0], [0, 1, 0], [1,1,1]);
 
@@ -937,18 +1012,39 @@
 					// tnt Object
 					console.log("parse vertices for tnt");
 					var result = ParseVertices(window.tnt, window.tntMtl);
-					this.tnt = GPU.CreateObject(2, Tnt, [4, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+					this.tnt = GPU.CreateObject(1, Tnt, [4, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+					var tnt2 = GPU.CreateObject(1, Tnt, [-6, -2, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+					var tnt3 = GPU.CreateObject(1, Tnt, [10, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
 
-					this.ropeRightEnd = [this.rope1.rightmostBurnPos[0], this.rope1.rightmostBurnPos[1], this.rope1.pos[2]];
-					console.log("creating flame...")
-					/*var flame = GPU.CreateObject(0, Flame, this.ropeRightEnd, [0,0,0]);
-					flame.StartRope(rope1);
-					flame.currentTnt = tnt;*/						
+					this.ropeRightEnd = [this.rope1.rightmostBurnPos[0], this.rope1.rightmostBurnPos[1], this.rope1.pos[2]];							
 
 					this.startTime = performance.now();
 					this.loops = 0;
 					requestAnimationFrame(FrameUpdate);
-				}				
+				}		
+				
+				GetObjectsOfType(type)
+				{
+					let objects = [];
+					for(var i in this.Visual)
+					{
+						if(this.Visual[i] instanceof type)						
+							objects.push(this.Visual[i]);			
+					}
+
+					for(var i in this.Solid)
+					{
+						if(this.Solid[i] instanceof type)
+							objects.push(this.Solid[i]);
+					}
+
+					for(var i in this.Trigger)
+					{
+						if(this.Trigger[i] instanceof type)						
+							objects.push(this.Trigger[i]);
+					}
+					return objects;
+				}
 				
 				UpdateAll()
 				{
@@ -1139,8 +1235,9 @@
 							isRope: u32,
 
 							flamePos: vec3f,
-							isFlashing: u32,
-							explodePos: vec3f,
+							isFlashing: u32,							
+							isLaunchable: u32, //if this is unitialized, assume object is static
+							explodePos: array<vec3f, 3>,
 						};						
 						@group(0) @binding(0) var<uniform> uni: Uniforms;				
 
@@ -1403,9 +1500,8 @@
 							let worldPos3: vec3<f32> = worldPos4.xyz;																															
 
 							vOutput.worldSpace = worldPos3;
-							vOutput.position = PerspectiveProjection(MoveCamera(worldPos4));
-													
-							//vOutput.flameWorldPos = (uni.matrix * vec4f(uni.flamePos, 1.0)).xyz;
+							vOutput.position = PerspectiveProjection(MoveCamera(worldPos4));																				
+							//may need an array of flame positions later
 							vOutput.flameWorldPos = uni.flamePos;
 
 							vOutput.normal = rotate(vec4f(normal, 0.0));
@@ -1429,7 +1525,14 @@
 												
 						@fragment
 						fn fragmentMain(fsInput: VertexOutput) -> @location(0) vec4f
-						{	
+						{
+							//explodePos[0] at start = white, white, white
+							//explodePos[1] at start = white, white, white
+							//explodePos[2] at start = white, white, none
+
+							//explodePos[2].x is 9999, y is around 6
+							//return vec4f(vec3f(uni.explodePos[0].x/3), 1);							
+
 							//get the early returns out of the way first for better performance
 							if(uni.isFire == 1u)
 							{
@@ -1460,16 +1563,19 @@
 								{
 									discard;
 								}
-							}											
+							}
 							else if(uni.isFlashing == 1u)
 							{
 								return vec4f(1);
 							}
-
-							//hard coded explosion radius for now, might customize later
-							if(distance(fsInput.worldSpace, uni.explodePos) < 8) // && uni.isSmoke == 0u
+							
+							for(var i = 0u; i < 3u; i++)
 							{
-								discard;
+								//hard coded explosion radius for now, might customize later
+								if(distance(fsInput.worldSpace, uni.explodePos[i]) < 8 && uni.isLaunchable == 0u)
+								{
+									discard;
+								}
 							}
 
 							var AMBIENT_TOTAL = fsInput.color * lightSystem.ambient;		
@@ -1609,7 +1715,7 @@
 					});										
 					this.uniformBuffer = GPU.device.createBuffer({
 						label: 'dummyUniform',
-						size: 176,
+						size: 192,
 						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 					});
 					//linear vs point sample distance for textures
@@ -1618,7 +1724,7 @@
 						addressMoveV: 'mirror-repeat',
 						minFilter: 'nearest',
 						maxFilter: 'linear',
-					});															
+					});				
 
 					//LAYOUT VARS
 

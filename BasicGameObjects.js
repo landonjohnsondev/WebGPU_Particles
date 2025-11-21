@@ -90,12 +90,25 @@ class GameObject
 		this.prefab;
 		this.transform = new Transform();
 
-		this.uniformBufferSize = 176;
+		this.uniformBufferSize = 224;
 		this.uniformBuffer = GPU.device.createBuffer({
 			label: 'uniformBuffer',
 			size: this.uniformBufferSize,
 			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 		});
+	}
+
+	Normalize(vector)
+	{
+		let magnitude = math.sqrt(vector[0]**2 + vector[1]**2 + vector[2]**2);
+		if(magnitude == 0)
+			return [0,0,0];
+
+		let normalVector = [];
+		normalVector[0] = vector[0] / magnitude;
+		normalVector[1] = vector[1] / magnitude;
+		normalVector[2] = vector[2] / magnitude;
+		return normalVector;
 	}
 
 	VectorSum(vector1, vector2)
@@ -382,7 +395,7 @@ class Light extends GameObject
 		this.specularity = 50.0;
 		this.ambientLight = 0.65;
 
-		this.spinCenter = [0,0,0];				
+		this.spinCenter = [0,0,0];
 				
 		this.pLightGroup = GPU.device.createBindGroup
 		({
