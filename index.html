@@ -498,6 +498,10 @@
 					this.currentRope = undefined;
 					this.currentTnt = undefined;
 					
+					// Create and parent smoke
+					var smoke = GPU.CreateObject(1, Smoke, [this.pos[0], this.pos[1] + 1, this.pos[2]], [0, 1, 0], [1,1,1]);
+					//this.SetParent(smoke);
+					
 					//set isFire to true in the shader
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([1]));			
 				}																				
@@ -1002,7 +1006,12 @@
 					console.log("parse vertices for cube");
 					var result = ParseVertices(window.cube, window.cubeMtl);
 					var cube = GPU.CreateObject(1, CustomObj, [0.0, -2, 3], [0,0,0], [1,1,1], result, window.spiralTexture, window.spiralNormals);
-					cube.specularity = 100;										
+					cube.specularity = 100;
+
+					console.log("parse vertices for dirt");
+					var result = ParseVertices(window.dirt, window.dirtMtl);
+					var dirt = GPU.CreateObject(1, CustomObj, [3, -15, 2], [0,0,0], [2,1.5,2], result);
+					dirt.specularity = 30;		
 
 					//TEST Smoke					
 					//why does smoke not move up when i position it higher and higher with certain scales?
