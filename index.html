@@ -339,9 +339,11 @@
 
 			class Smoke extends GameObject
 			{
-				constructor(pos, rot, scale, rawTexture, normalMap)
+				constructor(pos, rot, scale, fade=0, rawTexture, normalMap)
 				{
 					super(pos, rot, scale);				
+
+					this.fade = fade;
 
 					let maxDim = 1;
 					let maxUV = 2;
@@ -398,13 +400,27 @@
 				Update()
 				{					
 					this.ApplySceneGraph();
-					this.timer += (1/60);										
+					this.timer += (1/60);								
 					
 					//make flame face camera for billboarded effect if parent is null, otherwise, fire takes care of it
 					if(this.parent == null)
 						this.localRot[1] = this.camera.rot[1];
 
 					this.transform.doRotations(this.localRot);
+					
+					// If we want smoke to fade, then wait 1 secs
+					if(this.fade == 1 && this.timer >= 1)
+					{
+						// shrink the smoke
+						this.localScale[0] -= 0.02;
+						this.localScale[1] -= 0.02;
+						this.localScale[2] -= 0.02;
+						
+						if (this.localScale[1] <= 0)
+						{
+							GPU.DestroyObject(this.id);
+						}
+					}
 				}				
 											
 				Render(commandPass)
@@ -486,7 +502,7 @@
 					//set isFire to true in the shader
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([1]));			
 
-					this.smoke = GPU.CreateObject(1, Smoke, [0,1,0], [0,0,0]);
+					this.smoke = GPU.CreateObject(1, Smoke, [0,1,0], [0,0,0], [1, 1, 1], 0, 0, 0, 0);
 					this.smoke.SetParent(this);
 				}																				
 
@@ -855,19 +871,8 @@
 								Smoke, 
 								[this.pos[0] + math.random() * 10 + 1, 3,this.pos[2] + math.random() * 10 + 1],
 								[0,0,0],
-								[15, 15, 15]);
-							/*var smoke2 = GPU.CreateObject(
-								1, 
-								Smoke, 
-								[this.pos[0] + math.random() * 10 + 1, 3,this.pos[2] + math.random() * 10 + 1],
-								[0,0,0],
-								[15, 15, 15]);
-							var smoke3 = GPU.CreateObject(
-								1, 
-								Smoke, 
-								[this.pos[0] + math.random() * 10 + 1, 3,this.pos[2] + math.random() * 10 + 1],
-								[0,0,0],
-								[15, 15, 15]);*/
+								[15, 15, 15], 
+								0, 0, 0, 1);
 
 							this.SetExplodePos(this.pos);
 							this.LaunchObjects();
@@ -1042,13 +1047,6 @@
 					var result = ParseVertices(window.cube, window.cubeMtl);
 					var cube = GPU.CreateObject(1, CustomObj, [0.0, -2, 3], [0,0,0], [1,1,1], result, window.spiralTexture, window.spiralNormals);
 					cube.specularity = 100;										
-
-					//TEST Smoke					
-					//why does smoke not move up when i position it higher and higher with certain scales?
-					console.log("creating smoke...");
-					var smoke = this.CreateObject(2, Smoke, [2, -2, -1], [0, 1, 0], [1,1,1]);
-					// var smoke2 = this.CreateObject(1, Smoke, [1.5, -3, 0], [0, 1, 0], [1,1,1]);
-					// var smok3 = this.CreateObject(1, Smoke, [1, -3, 0], [0, 1, 0], [1,1,1]);	
 					
 					// tnt Object
 					//tnt needs to be made near the end of slow start so it can set explodePos on all objects
@@ -1160,7 +1158,7 @@
 					this.device.queue.submit([this.mainCommandBuffer]);
 				}				
 				
-				CreateObject(type, prefab, pos, rot, scale, parserData, texture, normalMap)
+				CreateObject(type, prefab, pos, rot, scale, parserData, texture, normalMap, fade)
 				{			
 					//type 0 = visual
 					//type 1 = solid
@@ -1171,7 +1169,7 @@
 					else if (prefab == Rope)
 						temp = new prefab(parserData, pos, rot, scale);
 					else if (prefab == Smoke)
-						temp = new prefab(pos, rot, scale);
+						temp = new prefab(pos, rot, scale, fade);
 					else
 						temp = new prefab(pos, rot, scale);
 
@@ -1512,14 +1510,14 @@
 						fn smoke_density(pos: vec3<f32>) -> f32 {
 							let t = uni.timer * 0.3;
 
-							let base = 1.0 - smoothstep(0.0, 2.5, length(pos.xz));
+							let base = 1.0 - smoothstep(0.0, 2, length(pos.xz));
 
 							let n = noise(pos * 1.0 + vec3<f32>(0.0, t, 0.0));
 
 							var d = base * n;
 
 							d *= smoothstep(-1.0, 0.0, pos.y);
-							d *= (2.5 - clamp(pos.y, 0.0, 2.5));
+							d *= (2.5 - clamp(pos.y, 0.0, 2));
 
 							return max(d, 0.0);
 						}
