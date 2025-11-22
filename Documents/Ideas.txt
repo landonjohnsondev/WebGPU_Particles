@@ -1,0 +1,1 @@
+• Use sphere radius + player radius to enable or disable collision
