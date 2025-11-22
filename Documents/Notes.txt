@@ -10,3 +10,4 @@ Rain: https://github.com/mrdoob/three.js/blob/dev/examples/webgpu_compute_partic
 
 Snow:
 https://github.com/mrdoob/three.js/blob/dev/examples/webgpu_compute_particles_snow.html
+

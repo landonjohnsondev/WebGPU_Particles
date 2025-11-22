@@ -90,6 +90,20 @@ class GameObject
 		this.prefab;
 		this.transform = new Transform();
 
+		// this.camBuff = GPU.device.createBuffer({
+		// 				label: 'camBuffer',
+		// 				size: 32,
+		// 				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+		// 			});
+
+		// 			this.camGroup = GPU.device.createBindGroup({
+		// 				layout: GPU.pipeline.getBindGroupLayout(1),
+		// 				label: 'camera',
+		// 				entries: [
+		// 					{ binding: 0, resource: {buffer: this.camBuff}},
+		// 				],
+		// 			});
+
 		this.uniformBufferSize = 224;
 		this.uniformBuffer = GPU.device.createBuffer({
 			label: 'uniformBuffer',
