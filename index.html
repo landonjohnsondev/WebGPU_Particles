@@ -168,7 +168,7 @@
 						this.Ks = parserData[3];
 						this.specularity = parserData[4];						
 					}
-					
+										
 					this.vertexBuffer = GPU.device.createBuffer({
 						label: "verticeBuffer",
 						size: this.vertices.byteLength,
@@ -486,7 +486,7 @@
 					//set isFire to true in the shader
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([1]));			
 
-					this.smoke = GPU.CreateObject(2, Smoke, [0,1,0], rot);
+					this.smoke = GPU.CreateObject(1, Smoke, [0,1,0], [0,0,0]);
 					this.smoke.SetParent(this);
 				}																				
 
@@ -507,7 +507,8 @@
 				StartRope(rope)
 				{
 					this.SetParent(rope);
-					this.ApplySceneGraph();					
+					//need to do this otherwise the flame's transform and goal is messed up lol
+					this.ApplySceneGraph();
 
 					this.pathPositions = rope.GetSortedPathPositions();
 
@@ -524,11 +525,7 @@
 					//make flame face camera for billboarded effect
 					this.localRot[1] = this.camera.rot[1];
 					this.transform.doRotations(this.localRot);			
-
-					//console.log("distToGoal: " + this.VectorDistance(this.localPos, this.goalPos))	
-					console.log("flamePos: " + this.pos + "\ngoalPos: " + this.goalPos + "\nxChangeToGoal: " + this.xChangeToGoal
-						+ ", yChangeToGoal: " + this.yChangeToGoal + ", zChangeToGoal: " + this.zChangeToGoal);			
-					console.log("distToGoal: " + this.VectorDistance(this.pos, this.goalPos));
+					
 					if(this.VectorDistance(this.pos, this.goalPos) > 0.01)
 					{
 						//ex: say ropeBurn time is 5 seconds and xChangeToGoal is 10.
@@ -538,8 +535,7 @@
 						this.localPos[2] += (1/60) * (this.zChangeToGoal/this.ropeBurnTime);					
 					}
 					else
-					{					
-						console.log("changing goal");
+					{											
 						this.goalIdx--;
 						if(this.goalIdx < 0)
 						{
@@ -555,8 +551,7 @@
 
 					if(this.parent == undefined)
 						return;
-															
-					console.log("flame goalPos: " + this.goalPos);
+
 					//need to use rope's uniform buffer so that isRope in fragment shader has access to flame pos
 					GPU.device.queue.writeBuffer(this.parent.uniformBuffer, 144, new Float32Array(this.pos));
 				}
@@ -760,15 +755,19 @@
 					
 					console.log("parse vertices for rope");
 					var result = ParseVertices(window.rope1, window.rope1Mtl);
+					//keep scale as 1,1,1 for now otherwise flame is messed up since it's a child
 					var rope = GPU.CreateObject(1, Rope, [0,0,0], [0,0,0], [1,1,1], result);					
 					rope.SetParent(this);
-				}				
+				}
 
 				SetExplodePos(pos)
-				{					
+				{
 					let tnts = GPU.GetObjectsOfType(Tnt);
-					tnts.push(this); //CreateObject can't add object to lists until after the constructor runs					
+					tnts.push(this); //CreateObject can't add object to lists until after the constructor runs
 					pos.push(1); //make pos a vec4f to ensure it is 16 bytes long
+
+					var result = ParseVertices(window.sphere, window.sphereMtl);
+					var sphere = GPU.CreateObject(0, Crater, pos, [0,0,0], [8,8,8], result, window.grassTexture, window.grassNormals);
 
 					let initialOffset = 176;
 					for(let j = 0; j < tnts.length; j++)
@@ -789,7 +788,7 @@
 				{
 					//this is after all constructors have ran, so this includes the current tnt
 					let launchables = GPU.GetObjectsOfType(Tnt);
-					let camera = GPU.GetObjectOfType(Camera);					
+					let camera = GPU.GetObjectOfType(Camera);
 					launchables.push(camera);
 					
 					//remove current tnt
@@ -847,9 +846,29 @@
 
 					if(this.isFlashing)
 					{
+						// EXPLODING
 						this.explodeTimer -= (1/60);
 						if(this.explodeTimer < 0)
-						{							
+						{						
+							var smoke1 = GPU.CreateObject(
+								1, 
+								Smoke, 
+								[this.pos[0] + math.random() * 10 + 1, 3,this.pos[2] + math.random() * 10 + 1],
+								[0,0,0],
+								[15, 15, 15]);
+							/*var smoke2 = GPU.CreateObject(
+								1, 
+								Smoke, 
+								[this.pos[0] + math.random() * 10 + 1, 3,this.pos[2] + math.random() * 10 + 1],
+								[0,0,0],
+								[15, 15, 15]);
+							var smoke3 = GPU.CreateObject(
+								1, 
+								Smoke, 
+								[this.pos[0] + math.random() * 10 + 1, 3,this.pos[2] + math.random() * 10 + 1],
+								[0,0,0],
+								[15, 15, 15]);*/
+
 							this.SetExplodePos(this.pos);
 							this.LaunchObjects();
 							document.getElementById("boom").play();
@@ -866,6 +885,44 @@
 					this.isFlashing = true;
 				}
 				
+				Render(commandPass)
+				{
+					commandPass.setBindGroup(0, this.mainBindGroup);					
+					commandPass.setBindGroup(2, this.textureBindGroup);									
+
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
+						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
+						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
+						this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
+						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
+					]));				
+					
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array(this.Ka));
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 96, new Float32Array(this.Ks));						
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 108, new Float32Array([this.specularity]));
+
+					commandPass.setVertexBuffer(0, this.vertexBuffer);
+					commandPass.setIndexBuffer(this.indexBuffer, "uint16");					
+					commandPass.drawIndexed(this.indexes.length);
+				}
+			}
+
+			class Crater extends CustomObj
+			{
+				constructor(parserData, rawTexture, normalMap, pos, rot, scale)
+				{
+					super(parserData, rawTexture, normalMap, pos, rot, scale);
+					//set isCrater to true
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 224, new Uint32Array([1]));
+					//set usingTexture to true
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 112, new Uint32Array([1]));
+				}
+
+				Update()
+				{
+					this.ApplySceneGraph();
+				}
+
 				Render(commandPass)
 				{
 					commandPass.setBindGroup(0, this.mainBindGroup);					
@@ -920,7 +977,7 @@
 				async SlowStart()
 				{					
 					//you can specify less parameters than the function defines and JS will still run it
-					var camera = this.CreateObject(0, Camera, [3,-3,-2], [0,0,0]);																													
+					var camera = this.CreateObject(0, Camera, [3,-3,-2], [0,0,0]);										
 
 					var pointLight;
 					for(let i = 0; i < 5; i++)
@@ -1109,10 +1166,12 @@
 					//type 1 = solid
 					//type 2 = trigger										
 					var temp;
-					if(prefab == CustomObj || prefab == Tnt)
+					if(prefab == CustomObj || prefab == Tnt  || prefab == Crater)
 						temp = new prefab(parserData, texture, normalMap, pos, rot, scale); //Yes this dark sorcery will work.
 					else if (prefab == Rope)
 						temp = new prefab(parserData, pos, rot, scale);
+					else if (prefab == Smoke)
+						temp = new prefab(pos, rot, scale);
 					else
 						temp = new prefab(pos, rot, scale);
 
@@ -1245,6 +1304,7 @@
 							isFlashing: u32,							
 							isLaunchable: u32, //if this is unitialized, assume object is static
 							explodePos: array<vec3f, 3>,
+							isCrater: u32,
 						};						
 						@group(0) @binding(0) var<uniform> uni: Uniforms;				
 
@@ -1531,8 +1591,7 @@
 												
 						@fragment
 						fn fragmentMain(fsInput: VertexOutput) -> @location(0) vec4f
-						{							
-							//get the early returns out of the way first for better performance
+						{														
 							if(uni.isFire == 1u)
 							{
 								var v = -1.0 + 2.0 * fsInput.texCoords.xy / 1.0;
@@ -1555,7 +1614,8 @@
 								}
 								return fragColor;
 							}
-							else if(uni.isRope == 1u)
+							
+							if(uni.isRope == 1u)
 							{
 								//flameWorldPos moves left. discard pixels as flameWorldPos reaches them
 								if (fsInput.worldSpace.x + 0.05 > fsInput.flameWorldPos.x)
@@ -1563,25 +1623,11 @@
 									discard;
 								}
 							}
-							else if(uni.isFlashing == 1u)
+							
+							if(uni.isFlashing == 1u)
 							{
 								return vec4f(1);
-							}
-							
-							for(var i = 0u; i < 3u; i++)
-							{
-								if(uni.isLaunchable == 1u || uni.isSmoke == 1u)
-								{
-									break;
-								}
-
-								//to fix the hollow explosion issues, try drawing a sphere at the explodePos and trimming the top
-								// hard coded explosion radius for now, might customize later
-								if(distance(fsInput.worldSpace, uni.explodePos[i]) < 8)
-								{
-									discard;
-								}
-							}
+							}						
 
 							var AMBIENT_TOTAL = fsInput.color * lightSystem.ambient;		
 							var newNormal: vec3f = fsInput.normal.xyz;
@@ -1589,7 +1635,7 @@
 
 							let dx: vec3f = normalize(dpdx(fsInput.worldSpace));
 							let bitangent: vec3f = normalize(cross(normalizedNormal, dx));
-							let tangent: vec3f = normalize(cross(bitangent, normalizedNormal));
+							let tangent: vec3f = normalize(cross(bitangent, normalizedNormal));							
 
 							//read tangent from file or manually calculate tangent?
 							let TBN = mat3x3<f32>(tangent, bitangent, normalizedNormal); //basically a lookat matrix from surface, use vertice normal
@@ -1598,10 +1644,29 @@
 							let normalTangent: vec3f = normalMapColor * 2.0 - 1.0;
 							var normalWS = normalize(TBN * normalTangent); //old texture example code
 
+							//there's weird errors when using fsInput.worldSpace or textureSample before dpdx, so I'm setting this variable early
+							let textureValues = textureSample(texture, textureSampler, fsInput.texCoords);
+
+							//get the early returns out of the way first for better performance
+							if(uni.isCrater == 1u && fsInput.worldSpace.y < -5)
+							{
+								return textureValues;
+							}
+															
+							for(var i = 0u; i < 3u; i++)
+							{								
+								//to fix the hollow explosion issues, try drawing a sphere at the explodePos and trimming the top
+								// hard coded explosion radius for now, might customize later
+								if(distance(fsInput.worldSpace, uni.explodePos[i]) < 8 && uni.isLaunchable == 0u && uni.isSmoke == 0u)
+								{
+									discard;
+								}								
+							}							
+
 							if(uni.usingNormalMaps == 1u)
 							{
 								newNormal = normalWS;
-							}	
+							}															
 						
 							var lightPower: vec3f = vec3<f32>(0,0,0); //summation of all light power
 							var specPower: vec3<f32>; //summation of all specularity light power
@@ -1621,7 +1686,7 @@
 							
 							//for spotlight
 							var focus: f32;
-							var direction: vec3<f32> = vec3<f32>(1,-1,1);
+							var direction: vec3<f32> = vec3<f32>(1,-1,1);							
 
 							for(var i = 0u; i < min(lightSystem.numPointLights, 10u); i++)
 							{																			
@@ -1690,13 +1755,13 @@
 								return sm;
 															
 								//return vec4f(1.0, 1.0, 1.0, 0.5);
-							}	
+							}							
 
 							var textureUse : f32;
 							textureUse = f32(uni.usingTexture);
 							if(uni.usingTexture == 1u)
 							{
-								return vec4f(vec4f(uni.Ka.x, uni.Ka.y, uni.Ka.z, 1) * textureSample(texture, textureSampler, fsInput.texCoords) * lightSystem.ambient + vec4f(dirLight + lightPower + specPower, 1));
+								return vec4f(vec4f(uni.Ka.x, uni.Ka.y, uni.Ka.z, 1) * textureValues * lightSystem.ambient + vec4f(dirLight + lightPower + specPower, 1));
 							}
 							else
 							{

@@ -147,7 +147,7 @@ function ParseVertices(fileContent, materialContent)
             let key = vertexIdx.toString() + " " + normalIdx.toString();         
             if(!usedVertices[key])
             {
-                let newIdx = finalVertices.length/GPU.vertexStride;
+                let newIdx = finalVertices.length / GPU.vertexStride;
                 let vertice = GetVertexAtIdx(vertices, vertexIdx);    
                 let normal = GetNormalAtIdx(normals, normalIdx);
                 let texel = GetTexCoordsAtIdx(texCords, textureIdx);
@@ -155,7 +155,7 @@ function ParseVertices(fileContent, materialContent)
                 //console.log(Object.getOwnPropertyNames(KdVals)); // shows all hashmap entries
                 
                 //console.log("texture idx: " + textureIdx);    
-                if(KdVals[curMat] != undefined)            
+                if(Object.keys(KdVals).length != 0)
                     vertice.push(parseFloat(KdVals[curMat][0]), parseFloat(KdVals[curMat][1]), parseFloat(KdVals[curMat][2]));                
                 else
                     vertice.push(0,0,0);
@@ -172,10 +172,19 @@ function ParseVertices(fileContent, materialContent)
                 }
 
                 vertice.push(normal[0], normal[1], normal[2]);
-
-                vertice.push(KaVals[curMat][0], KaVals[curMat][1], KaVals[curMat][2]);
-                vertice.push(KsVals[curMat][0], KsVals[curMat][1], KsVals[curMat][2]);
-                vertice.push(shinyVals[curMat]);
+                
+                if(Object.keys(KaVals).length != 0)
+                {
+                    vertice.push(KaVals[curMat][0], KaVals[curMat][1], KaVals[curMat][2]);
+                    vertice.push(KsVals[curMat][0], KsVals[curMat][1], KsVals[curMat][2]);
+                    vertice.push(shinyVals[curMat]);
+                }
+                else
+                {
+                    vertice.push(0,0,0);
+                    vertice.push(0,0,0);
+                    vertice.push(0);
+                }               
 
                 for(const flt of vertice)
                     finalVertices.push(flt);
@@ -189,6 +198,7 @@ function ParseVertices(fileContent, materialContent)
             }						
         }
 
+        //console.log("finalVertices: " + finalVertices);
         let fullIndexes = TriangulateFace(lineIndexes);
         for(const idx of fullIndexes)					        
             finalVerticeIndexes.push(idx);			                    

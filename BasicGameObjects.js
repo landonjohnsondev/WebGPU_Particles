@@ -104,7 +104,7 @@ class GameObject
 		// 				],
 		// 			});
 
-		this.uniformBufferSize = 224;
+		this.uniformBufferSize = 240;
 		this.uniformBuffer = GPU.device.createBuffer({
 			label: 'uniformBuffer',
 			size: this.uniformBufferSize,
