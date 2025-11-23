@@ -480,7 +480,7 @@
 						],
 					});
 					
-					this.flameSpeedPerSecond = 0.5;					
+					this.flameSpeedPerSecond = 1.3;					
 					this.camera = GPU.GetObjectOfType(Camera);					
 					
 					//set isFire to true in the shader
@@ -1055,9 +1055,10 @@
 					console.log("parse vertices for tnt");
 					var result = ParseVertices(window.tnt, window.tntMtl);
 					var tnt = GPU.CreateObject(1, Tnt, [4, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
-					var tnt = GPU.CreateObject(1, Tnt, [7, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+					//for some reason adding this tnt messes up crater
+					//var tnt = GPU.CreateObject(1, Tnt, [7, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
 					var tnt2 = GPU.CreateObject(1, Tnt, [-12, -2, 0], [0,0,0], [1,1,1], result, window.tntTexture);
-					var tnt3 = GPU.CreateObject(1, Tnt, [12, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);					
+					var tnt3 = GPU.CreateObject(1, Tnt, [12, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);		
 
 					this.startTime = performance.now();
 					this.loops = 0;
@@ -1592,7 +1593,8 @@
 												
 						@fragment
 						fn fragmentMain(fsInput: VertexOutput) -> @location(0) vec4f
-						{														
+						{
+							//get the early returns out of the way first for better performance				
 							if(uni.isFire == 1u)
 							{
 								var v = -1.0 + 2.0 * fsInput.texCoords.xy / 1.0;
@@ -1646,29 +1648,23 @@
 							var normalWS = normalize(TBN * normalTangent); //old texture example code
 
 							//there's weird errors when using fsInput.worldSpace or textureSample near dpdx, so I'm setting this variable early
-							let textureValues = textureSample(texture, textureSampler, fsInput.texCoords);
+							let textureValues = textureSample(texture, textureSampler, fsInput.texCoords);													
 
-							//get the early returns out of the way first for better performance							
+							//already discarded explodePos as this point. why isn't top discarding?
+							if(uni.isCrater == 1u && fsInput.worldSpace.y < -5)
+							{								
+								return textureValues;
+							}													
 																			
 							for(var i = 0u; i < 3u; i++)
 							{																							
 								//to fix the hollow explosion issues, try drawing a sphere at the explodePos and trimming the top
 								// hard coded explosion radius for now, might customize later
-								if(distance(fsInput.worldSpace, uni.explodePos[i]) < 7.9 && uni.isLaunchable == 0u && uni.isSmoke == 0u)
+								if(distance(fsInput.worldSpace, uni.explodePos[i]) < 8 && uni.isLaunchable == 0u && uni.isSmoke == 0u)
 								{
 									discard;
 								}								
-							}						
-								
-							//already discarded explodePos as this point. why isn't top discarding?
-							if(uni.isCrater == 1u && fsInput.worldSpace.y < -5)
-							{
-								return textureValues;
-							}
-							else if(uni.isCrater == 1u)
-							{
-								discard;
-							}
+							}														
 
 							if(uni.usingNormalMaps == 1u)
 							{
