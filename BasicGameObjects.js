@@ -112,6 +112,50 @@ class GameObject
 		});
 	}
 
+	IndexDraw(commandPass)
+	{
+		commandPass.setBindGroup(0, this.mainBindGroup);					
+		commandPass.setBindGroup(2, this.textureBindGroup);									
+
+		GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
+			this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
+			this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
+			this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
+			this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
+		]));				
+		GPU.device.queue.writeBuffer(this.uniformBuffer, 64, new Float32Array(this.rot));
+
+		if(this.timer != undefined)
+			GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));
+		
+		GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array(this.Ka));
+		GPU.device.queue.writeBuffer(this.uniformBuffer, 96, new Float32Array(this.Ks));						
+		GPU.device.queue.writeBuffer(this.uniformBuffer, 108, new Float32Array([this.specularity]));
+
+		commandPass.setVertexBuffer(0, this.vertexBuffer);
+		commandPass.setIndexBuffer(this.indexBuffer, "uint16");					
+		commandPass.drawIndexed(this.indexes.length);
+	}
+
+	ParticleDraw(commandPass)
+	{
+		commandPass.setBindGroup(0, this.billboardGroup);
+		commandPass.setBindGroup(2, this.textureBindGroup);
+
+		//The reason for the timer issue is that every object uses its own uniform buffer, which sets timer to 0					
+		GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));
+		
+		GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
+			this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
+			this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
+			this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
+			this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
+		]));				
+		
+		commandPass.setVertexBuffer(0, this.vertexBuffer);
+		commandPass.draw(6,1,0,0);
+	}
+
 	Normalize(vector)
 	{
 		let magnitude = math.sqrt(vector[0]**2 + vector[1]**2 + vector[2]**2);
