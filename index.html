@@ -45,8 +45,7 @@
 						GPU.device.queue.writeBuffer(GPU.Trigger[j].uniformBuffer, initialOffset + (16 * i), new Float32Array(dummyPos));
 				}
 			}			
-				
-			//to set AND retrieve current explodePositions as craters are made, keep array of explodePositions in WebGPU class
+							
 			//when a crater is made, initialize its explodePositions to the current GPU explodePositions
 			//then write the crater's new explode pos to all objects
 			function SetExplodePos(pos, idx)
@@ -54,11 +53,12 @@
 				pos.push(1); //make pos a vec4f to ensure it is 16 bytes long				
 				var result = ParseVertices(window.sphere, window.sphereMtl);
 				var sphere = GPU.CreateObject(0, Crater, pos, [0,0,0], [8,8,8], result, window.grassTexture, window.grassNormals);
-
-				//idx represents the tnt number it is, like 0th tnt or 1st tnt for explodePos[0] or explodePos[1] in shader
+				
+				//to set AND retrieve current explodePositions as craters are made, keep array of explodePositions in WebGPU class
 				GPU.explodePos[idx] = pos;
 				console.log("set explodePos[" + idx + "] to " + pos);
 				
+				//idx represents the tnt number it is, like 0th tnt or 1st tnt for explodePos[0] or explodePos[1] in shader
 				let initialOffset = 176;
 				for(var i in GPU.Visual)
 					GPU.device.queue.writeBuffer(GPU.Visual[i].uniformBuffer, initialOffset + (16 * idx), new Float32Array(pos));
@@ -882,9 +882,14 @@
 				}
 
 				InitExplodePositions()
-				{				
-					for(let i = 0; i < GPU.explodePos.length; i++)					
-						GPU.device.queue.writeBuffer(this.uniformBuffer, 176 + (16 * i), new Float32Array(GPU.explodePos[i]));					
+				{	
+					var i = 0;			
+					for(i = 0; i < GPU.explodePos.length; i++)										
+						GPU.device.queue.writeBuffer(this.uniformBuffer, 176 + (16 * i), new Float32Array(GPU.explodePos[i]));
+
+					//after last known explodePos is initialized, use dummyPos for rest
+					for(; i < 3; i++)
+						GPU.device.queue.writeBuffer(this.uniformBuffer, 176 + (16 * i), new Float32Array([9999,9999,9999]));
 				}
 
 				Update()
@@ -1603,7 +1608,7 @@
 							for(var i = 0u; i < 3u; i++)
 							{							
 								// hard coded explosion radius for now, might customize later							
-								if(distance(fsInput.worldSpace, uni.explodePos[i]) < 7.9 && uni.isLaunchable == 0u && uni.isSmoke == 0u)
+								if(distance(fsInput.worldSpace, uni.explodePos[i]) < 7.92 && uni.isLaunchable == 0u && uni.isSmoke == 0u)
 								{
 									discard;
 								}
@@ -1614,6 +1619,7 @@
 							{
 								return textureValues;
 							}
+							//discard top part of crater
 							else if(uni.isCrater == 1u)
 							{
 								discard;
