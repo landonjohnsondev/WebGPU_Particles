@@ -11,3 +11,11 @@ Rain: https://github.com/mrdoob/three.js/blob/dev/examples/webgpu_compute_partic
 Snow:
 https://github.com/mrdoob/three.js/blob/dev/examples/webgpu_compute_particles_snow.html
 
+Fog:
+https://threejs.org/examples/webgpu_custom_fog.html
+
+Tornado:
+https://threejs.org/examples/webgpu_tsl_vfx_tornado.html
+
+Portal:
+https://threejs.org/examples/webgpu_portal.html

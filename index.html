@@ -19,6 +19,7 @@
 			
 			function FrameUpdate()
 			{				
+				GPU.GetControllerInput();
 				GPU.UpdateAll();
 				GPU.RenderAll();
 				averageTime = (performance.now() - GPU.startTime) / GPU.loops;
@@ -26,7 +27,7 @@
 				// console.log("average loop time: " + averageTime + "ms");
 				// console.log("percentage of full speed: " + ((averageTime*60)/1000));
 				requestAnimationFrame(FrameUpdate);
-			}
+			}			
 
 			//making this a global function so it can be called after all objects have been made
 			function InitExplodePositions(dummyPos)
@@ -290,7 +291,79 @@
 
 					//set isLaunchable to true
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 160, new Uint32Array([1]));
-					this.vel = [0,0,0];
+					this.vel = [0,0,0];					
+
+					this.stickDeadzone = 0.05;
+				}
+				
+				LeftStickX()
+				{
+					if(GPU.controller == undefined)	
+						return 0.0;
+					return GPU.controller.axes[0];							
+				}
+
+				LeftStickY()
+				{
+					if(GPU.controller == undefined)	
+						return 0.0;
+					return GPU.controller.axes[1] * -1;
+				}
+
+				RightStickX()
+				{					
+					if(GPU.controller == undefined)	
+						return 0.0;
+					return GPU.controller.axes[2];
+				}
+
+				RightStickY()
+				{
+					if(GPU.controller == undefined)	
+						return 0.0;
+					return GPU.controller.axes[3] * -1;
+				}
+				
+				LeftTriggerHeld()
+				{
+					if(GPU.controller == undefined)	
+						return false;
+					return GPU.controller.buttons[6].pressed;
+				}
+
+				RightTriggerHeld()
+				{
+					if(GPU.controller == undefined)	
+						return false;
+					return GPU.controller.buttons[7].pressed;
+				}
+
+				LeftDpadHeld()
+				{
+					if(GPU.controller == undefined)	
+						return false;
+					return GPU.controller.buttons[14].pressed;
+				}
+
+				RightDpadHeld()
+				{
+					if(GPU.controller == undefined)	
+						return false;
+					return GPU.controller.buttons[15].pressed;
+				}
+
+				UpDpadHeld()
+				{
+					if(GPU.controller == undefined)	
+						return false;
+					return GPU.controller.buttons[12].pressed;
+				}
+
+				DownDpadHeld()
+				{
+					if(GPU.controller == undefined)	
+						return false;
+					return GPU.controller.buttons[13].pressed;
 				}
 
 				Update()
@@ -304,50 +377,79 @@
 
 					this.vel[0] *= 0.98;
 					this.vel[1] *= 0.98;
-					this.vel[2] *= 0.98;
+					this.vel[2] *= 0.98;					
 
-					if(GPU.CheckKey('D'))
-						this.rot[1] += this.rotSpeed;
-					if(GPU.CheckKey('A'))
-						this.rot[1] -= this.rotSpeed;
+					var leftX = this.LeftStickX();
+					var leftY = this.LeftStickY();
+					var rightX = this.RightStickX();
+					var rightY = this.RightStickY();
+
+					// console.log("leftStick (" + leftX + ", " + leftY + ")");
+					// console.log("rightStick (" + rightX + ", " + rightY + ")");
+
+					//if a stick is being held
+					var rotIntensity = (math.abs(leftX) > this.stickDeadzone) ? math.abs(leftX) : 1.0;
+					if(GPU.CheckKey('D') || this.LeftStickX() > this.stickDeadzone || this.RightDpadHeld())
+						this.rot[1] += this.rotSpeed * rotIntensity;
+					if(GPU.CheckKey('A') || this.LeftStickX() < -this.stickDeadzone || this.LeftDpadHeld())
+						this.rot[1] -= this.rotSpeed * rotIntensity;
 					
-					if(GPU.CheckKey('W'))
+					var moveIntensity = (math.abs(leftY) > this.stickDeadzone) ? math.abs(leftY) : 1.0;
+					if(GPU.CheckKey('W') || this.LeftStickY() > this.stickDeadzone || this.UpDpadHeld())
 					{
-						this.localPos[0] += this.transform.forward[0] * this.moveSpeed;
-						this.localPos[1] += this.transform.forward[1] * this.moveSpeed;
-						this.localPos[2] += this.transform.forward[2] * this.moveSpeed;
+						this.localPos[0] += this.transform.forward[0] * this.moveSpeed * moveIntensity;
+						this.localPos[1] += this.transform.forward[1] * this.moveSpeed * moveIntensity;
+						this.localPos[2] += this.transform.forward[2] * this.moveSpeed * moveIntensity;
 					}
-					if(GPU.CheckKey('S'))
+					if(GPU.CheckKey('S') || this.LeftStickY() < -this.stickDeadzone || this.DownDpadHeld())
 					{
-						this.localPos[0] -= this.transform.forward[0] * this.moveSpeed;
-						this.localPos[1] -= this.transform.forward[1] * this.moveSpeed;
-						this.localPos[2] -= this.transform.forward[2] * this.moveSpeed;
+						this.localPos[0] -= this.transform.forward[0] * this.moveSpeed * moveIntensity;
+						this.localPos[1] -= this.transform.forward[1] * this.moveSpeed * moveIntensity;
+						this.localPos[2] -= this.transform.forward[2] * this.moveSpeed * moveIntensity;
 					}
-					if(GPU.CheckKey('Z'))
+					if(GPU.CheckKey('Z') || this.LeftTriggerHeld())
 					{
 						this.localPos[1] -= this.elevateSpeed;
 					}
-					if(GPU.CheckKey('X'))
+					if(GPU.CheckKey('X') || this.RightTriggerHeld())
 					{
 						this.localPos[1] += this.elevateSpeed;
 					}
 
 					//STRAFE CONTROLS
 					//Left key pressed. idk why left key is % with Towle's code
-					if(GPU.CheckKey('%'))
+					var strafeIntensity = (math.abs(rightX) > this.stickDeadzone) ? math.abs(rightX) : 1.0;
+					if(GPU.CheckKey('%') || this.RightStickX() < -this.stickDeadzone)
 					{						
-						this.localPos[0] -= this.strafeSpeed * this.transform.right[0];
-						this.localPos[1] -= this.strafeSpeed * this.transform.right[1];
-						this.localPos[2] -= this.strafeSpeed * this.transform.right[2];
+						this.localPos[0] -= this.strafeSpeed * this.transform.right[0] * strafeIntensity;
+						this.localPos[1] -= this.strafeSpeed * this.transform.right[1] * strafeIntensity;
+						this.localPos[2] -= this.strafeSpeed * this.transform.right[2] * strafeIntensity;
 					}
 					//Right key pressed. this is right key apparently
-					if(GPU.CheckKey('\''))
+					if(GPU.CheckKey('\'') || this.RightStickX() > this.stickDeadzone)
 					{						
-						this.localPos[0] += this.strafeSpeed * this.transform.right[0];
-						this.localPos[1] += this.strafeSpeed * this.transform.right[1];
-						this.localPos[2] += this.strafeSpeed * this.transform.right[2];
+						this.localPos[0] += this.strafeSpeed * this.transform.right[0] * strafeIntensity;
+						this.localPos[1] += this.strafeSpeed * this.transform.right[1] * strafeIntensity;
+						this.localPos[2] += this.strafeSpeed * this.transform.right[2] * strafeIntensity;
 					}					
-				}								
+					
+					if(GPU.controller != undefined)
+					{
+						const A = GPU.controller.buttons[0];
+						const B = GPU.controller.buttons[1];
+						const X = GPU.controller.buttons[2];
+						const Y = GPU.controller.buttons[3];
+						//these buttons correspond to xbox controller buttons
+						if(A.pressed)						
+							console.log("pressed A");						
+						if(B.pressed)						
+							console.log("pressed B");						
+						if(X.pressed)						
+							console.log("pressed X");						
+						if(Y.pressed)					
+							console.log("pressed Y");						
+					}
+				}
 
 				Render(commandPass)
 				{					
@@ -718,7 +820,8 @@
 						if (this.distFromCamera <= 4) 
 						{
 							// Player presses 'E' to light fire
-							if(GPU.CheckKey('E')) 
+							//Use optional chaining to exit if controller is null
+							if(GPU.CheckKey('E') || GPU.controller?.buttons[0].pressed) 
 							{
 								this.litFire = 1;
 								var spawnPos = this.rightmostBurnPos;
@@ -1045,6 +1148,14 @@
 					this.loops = 0;
 					requestAnimationFrame(FrameUpdate);
 				}		
+
+				//need to fetch the controller every frame or the input does not update
+				GetControllerInput()
+				{
+					const controllers = navigator.getGamepads();
+					if(controllers[0] != undefined)
+						this.controller = controllers[0];
+				}
 
 				GetObjectOfType(type)
 				{
@@ -1960,7 +2071,11 @@
 			canvas.addEventListener("click", WebGPU.mouseH);
 
 			window.onkeydown = WebGPU.keyD;
-			window.onkeyup = WebGPU.keyU;			
+			window.onkeyup = WebGPU.keyU;	
+			window.addEventListener("gamepadconnected", (e) =>
+			{
+				console.log("Controller connected: " + e.gamepad);			
+			});
 		</SCRIPT>
 	</HEAD>
 </HTML>

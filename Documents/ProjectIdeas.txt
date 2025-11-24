@@ -2,3 +2,4 @@ Graphics Project Ideas:
 • Boss with attacks you must jump that requires shooting tnt at it. Tnt respawns in waves. Tnt can be pushed around. Boss has a  health bar. Epic music
 • Enemy rush with tnt in a field you must ignite as they chase you
 • Place blocks like Minecraft (creeper?)
+• Use tnt to make crater and hide under sweeping lasers or blast over them. Boss shoots them with a cue, either with an animation or by lowering and rotating with the laser.
