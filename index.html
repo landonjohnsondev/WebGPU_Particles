@@ -28,6 +28,46 @@
 				requestAnimationFrame(FrameUpdate);
 			}
 
+			//making this a global function so it can be called after all objects have been made
+			function InitExplodePositions(dummyPos)
+			{
+				dummyPos.push(1);
+
+				for(let i = 0; i < 3; i++)
+				{
+					console.log("set all explode positions for current objects to " + dummyPos);
+					let initialOffset = 176;
+					for(var j in GPU.Visual)
+						GPU.device.queue.writeBuffer(GPU.Visual[j].uniformBuffer, initialOffset + (16 * i), new Float32Array(dummyPos));
+					for(var j in GPU.Solid)
+						GPU.device.queue.writeBuffer(GPU.Solid[j].uniformBuffer, initialOffset + (16 * i), new Float32Array(dummyPos));
+					for(var j in GPU.Trigger)
+						GPU.device.queue.writeBuffer(GPU.Trigger[j].uniformBuffer, initialOffset + (16 * i), new Float32Array(dummyPos));
+				}
+			}			
+							
+			//when a crater is made, initialize its explodePositions to the current GPU explodePositions
+			//then write the crater's new explode pos to all objects
+			function SetExplodePos(pos, idx)
+			{					
+				pos.push(1); //make pos a vec4f to ensure it is 16 bytes long				
+				var result = ParseVertices(window.sphere, window.sphereMtl);
+				var sphere = GPU.CreateObject(0, Crater, pos, [0,0,0], [8,8,8], result, window.grassTexture, window.grassNormals);
+				
+				//to set AND retrieve current explodePositions as craters are made, keep array of explodePositions in WebGPU class
+				GPU.explodePos[idx] = pos;
+				console.log("set explodePos[" + idx + "] to " + pos);
+				
+				//idx represents the tnt number it is, like 0th tnt or 1st tnt for explodePos[0] or explodePos[1] in shader
+				let initialOffset = 176;
+				for(var i in GPU.Visual)
+					GPU.device.queue.writeBuffer(GPU.Visual[i].uniformBuffer, initialOffset + (16 * idx), new Float32Array(pos));
+				for(var i in GPU.Solid)
+					GPU.device.queue.writeBuffer(GPU.Solid[i].uniformBuffer, initialOffset + (16 * idx), new Float32Array(pos));
+				for(var i in GPU.Trigger)
+					GPU.device.queue.writeBuffer(GPU.Trigger[i].uniformBuffer, initialOffset + (16 * idx), new Float32Array(pos));
+			}
+
 			class PointLight extends Light
 			{
 				constructor(pos, rot, scale)
@@ -218,27 +258,7 @@
 
 				Render(pass)
 				{
-					pass.setBindGroup(0, this.mainBindGroup);							
-					pass.setBindGroup(2, this.textureBindGroup);								
-
-					//WebGPU arrays are column-major, so remake the translation matrix accordingly
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
-						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
-						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
-						this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
-						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
-					]));					
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 64, new Float32Array(this.rot));
-															
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array(this.Ka));
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 96, new Float32Array(this.Ks));						
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 108, new Float32Array([this.specularity]));
-
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));
-					
-					pass.setVertexBuffer(0, this.vertexBuffer);
-					pass.setIndexBuffer(this.indexBuffer, "uint16");					
-					pass.drawIndexed(this.indexes.length);
+					this.IndexDraw(pass);
 				}
 			}
 
@@ -425,21 +445,7 @@
 											
 				Render(commandPass)
 				{
-					commandPass.setBindGroup(0, this.billboardGroup);					
-					commandPass.setBindGroup(2, this.textureBindGroup);
-
-					//The reason for the timer issue is that every object uses its own uniform buffer, which sets timer to 0					
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));
-
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
-						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
-						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
-						this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
-						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
-					]));					
-					
-					commandPass.setVertexBuffer(0, this.vertexBuffer);					
-					commandPass.draw(6,1,0,0);
+					this.ParticleDraw(commandPass);
 				}
 			}
 			
@@ -470,7 +476,7 @@
 					GPU.device.queue.writeBuffer(this.vertexBuffer, 0, this.vertices);
 
 					this.timer = 0.0;
-					this.flameGroup = GPU.device.createBindGroup
+					this.billboardGroup = GPU.device.createBindGroup
 					({
 						layout: GPU.pipeline.getBindGroupLayout(0),
 						label: "flameGroup",
@@ -484,19 +490,19 @@
 					//even though fire doesn't use texture bindings, the group needs to be bound since
 					//group(0) interacts with the textures in group(2) in the shader
 					this.SetupTextures(undefined, undefined);
-					this.dummyTextureGroup = GPU.device.createBindGroup
+					this.textureBindGroup = GPU.device.createBindGroup
 					({
 						layout: GPU.pipeline.getBindGroupLayout(2),
 						label: 'customObjTextureGroup',
 						entries:
 						[																
-							{ binding: 0, resource: this.textureObj.createView() },							
+							{ binding: 0, resource: this.textureObj.createView() },			
 							{ binding: 1, resource: GPU.sampler },
 							{ binding: 2, resource: this.normalTextureObj.createView() },
 						],
 					});
 					
-					this.flameSpeedPerSecond = 0.5;					
+					this.flameSpeedPerSecond = 1.3;					
 					this.camera = GPU.GetObjectOfType(Camera);					
 					
 					//set isFire to true in the shader
@@ -542,6 +548,9 @@
 					this.localRot[1] = this.camera.rot[1];
 					this.transform.doRotations(this.localRot);			
 					
+					if(this.goalPos == undefined)
+						return;
+
 					if(this.VectorDistance(this.pos, this.goalPos) > 0.01)
 					{
 						//ex: say ropeBurn time is 5 seconds and xChangeToGoal is 10.
@@ -551,7 +560,7 @@
 						this.localPos[2] += (1/60) * (this.zChangeToGoal/this.ropeBurnTime);					
 					}
 					else
-					{											
+					{
 						this.goalIdx--;
 						if(this.goalIdx < 0)
 						{
@@ -574,21 +583,7 @@
 											
 				Render(commandPass)
 				{
-					commandPass.setBindGroup(0, this.flameGroup);					
-					commandPass.setBindGroup(2, this.dummyTextureGroup);					
-
-					//The reason for the timer issue is that every object uses its own uniform buffer, which sets timer to 0					
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));
-					
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
-						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
-						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
-						this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
-						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
-					]));				
-					
-					commandPass.setVertexBuffer(0, this.vertexBuffer);
-					commandPass.draw(6,1,0,0);
+					this.ParticleDraw(commandPass);
 				}
 			}
 
@@ -611,7 +606,10 @@
 					let dummyFirePos = [9999,9999,9999];
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 144, new Float32Array(dummyFirePos));
 
-					this.ropeRightEnd = [this.rightmostBurnPos[0], this.rightmostBurnPos[1], this.pos[2]];			
+					this.ropeRightEnd = [this.rightmostBurnPos[0], this.rightmostBurnPos[1], this.pos[2]];	
+					
+					//since flame hasn't been made yet, initialize flamePos in the shader so rope isn't invisible
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 144, new Float32Array([9000,9999,9999]));
 				}								
 
 				GetSortedPathPositions()
@@ -718,28 +716,12 @@
 								flame.StartRope(this);
 							}
 						}
-					}
+					}										
 				}
 
 				Render(commandPass)
 				{
-					commandPass.setBindGroup(0, this.mainBindGroup);					
-					commandPass.setBindGroup(2, this.textureBindGroup);									
-
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
-						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
-						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
-						this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
-						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
-					]));				
-
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array(this.Ka));
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 96, new Float32Array(this.Ks));						
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 108, new Float32Array([this.specularity]));
-
-					commandPass.setVertexBuffer(0, this.vertexBuffer);
-					commandPass.setIndexBuffer(this.indexBuffer, "uint16");					
-					commandPass.drawIndexed(this.indexes.length);
+					this.IndexDraw(commandPass);
 				}
 			}
 
@@ -759,11 +741,7 @@
 					this.tntIdx = Tnt.numTnt - 1;				
 
 					//set usingTexture to true
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 112, new Uint32Array([1]));								
-
-					//initialize explodePos in shader to super far pos, otherwise it is 0,0,0
-					let dummyPos = [9999, 9999, 9999];
-					this.SetExplodePos(dummyPos);
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 112, new Uint32Array([1]));													
 										
 					//set isLaunchable to true
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 160, new Uint32Array([1]));
@@ -773,32 +751,25 @@
 					var result = ParseVertices(window.rope1, window.rope1Mtl);
 					//keep scale as 1,1,1 for now otherwise flame is messed up since it's a child
 					var rope = GPU.CreateObject(1, Rope, [0,0,0], [0,0,0], [1,1,1], result);					
-					rope.SetParent(this);
+					rope.SetParent(this);					
 				}
 
-				SetExplodePos(pos)
-				{
-					let tnts = GPU.GetObjectsOfType(Tnt);
-					tnts.push(this); //CreateObject can't add object to lists until after the constructor runs
-					pos.push(1); //make pos a vec4f to ensure it is 16 bytes long
-
-					var result = ParseVertices(window.sphere, window.sphereMtl);
-					var sphere = GPU.CreateObject(0, Crater, pos, [0,0,0], [8,8,8], result, window.grassTexture, window.grassNormals);
-
-					let initialOffset = 176;
-					for(let j = 0; j < tnts.length; j++)
-					{						
-						//tntIdx represents the tnt number it is, like 0th tnt, 1st tnt, etc
-						for(var i in GPU.Visual)
-							GPU.device.queue.writeBuffer(GPU.Visual[i].uniformBuffer, initialOffset + (16 * tnts[j].tntIdx), new Float32Array(pos));
-						for(var i in GPU.Solid)
-							GPU.device.queue.writeBuffer(GPU.Solid[i].uniformBuffer, initialOffset + (16 * tnts[j].tntIdx), new Float32Array(pos));
-						for(var i in GPU.Trigger)
-							GPU.device.queue.writeBuffer(GPU.Trigger[i].uniformBuffer, initialOffset + (16 * tnts[j].tntIdx), new Float32Array(pos));
-					}
-
-					GPU.device.queue.writeBuffer(this.uniformBuffer, initialOffset + (16 * this.tntIdx), new Float32Array(pos));
-				}
+				SortByTntIdx(tntList)
+				{					
+					for(let i = 0; i < tntList.length; i++)
+					{
+						for(let j = i+1; j < tntList.length; j++)
+						{
+							if(tntList[j].tntIdx < tntList[i].tntIdx)
+							{
+								var temp = tntList[j];
+								tntList[j] = tntList[i];
+								tntList[i] = tntList[j];	
+							}
+						}
+					}										
+					return tntList;
+				}				
 
 				LaunchObjects()
 				{
@@ -843,9 +814,9 @@
 				{
 					this.ApplySceneGraph();
 
-					this.localPos[0] += this.vel[0];
-					this.localPos[1] += this.vel[1];
-					this.localPos[2] += this.vel[2];
+					// this.localPos[0] += this.vel[0];
+					// this.localPos[1] += this.vel[1];
+					// this.localPos[2] += this.vel[2];
 
 					this.vel[0] *= 0.99;
 					this.vel[1] *= 0.99;
@@ -865,26 +836,18 @@
 						// EXPLODING
 						this.explodeTimer -= (1/60);
 						if(this.explodeTimer < 0)
-						{						
-							this.SetExplodePos(this.pos);
-							this.LaunchObjects();
+						{													
 							var smoke1 = GPU.CreateObject(
 								1, 
 								Smoke, 
-								[this.pos[0], 5,this.pos[2]],
+								//[this.pos[0] + math.random() * 10 + 1, 3,this.pos[2] + math.random() * 10 + 1],
+								[this.pos[0], this.pos[1]+8, this.pos[2]],
 								[0,0,0],
 								[20, 20, 20], 
 								0, 0, 0, 1);
-								
-							//var flame1 = GPU.CreateObject(0, Flame, [0,0,0], [0,0,0]);
-							//for(let i = 0; i < 3; i++)
-							//{
-								/*GPU.CreateObject(
-									0,
-									Flame,
-									[this.pos[0] * 2, 4, this.pos[2] * 2],
-									[0, 0, 0]);*/
-							//}
+
+							SetExplodePos(this.pos, this.tntIdx);
+							this.LaunchObjects();
 							document.getElementById("boom").play();
 							GPU.DestroyObject(this.id);
 						}
@@ -901,23 +864,7 @@
 				
 				Render(commandPass)
 				{
-					commandPass.setBindGroup(0, this.mainBindGroup);					
-					commandPass.setBindGroup(2, this.textureBindGroup);									
-
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
-						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
-						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
-						this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
-						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
-					]));				
-					
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array(this.Ka));
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 96, new Float32Array(this.Ks));						
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 108, new Float32Array([this.specularity]));
-
-					commandPass.setVertexBuffer(0, this.vertexBuffer);
-					commandPass.setIndexBuffer(this.indexBuffer, "uint16");					
-					commandPass.drawIndexed(this.indexes.length);
+					this.IndexDraw(commandPass);
 				}
 			}
 
@@ -930,6 +877,19 @@
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 224, new Uint32Array([1]));
 					//set usingTexture to true
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 112, new Uint32Array([1]));
+
+					this.InitExplodePositions();
+				}
+
+				InitExplodePositions()
+				{	
+					var i = 0;			
+					for(i = 0; i < GPU.explodePos.length; i++)										
+						GPU.device.queue.writeBuffer(this.uniformBuffer, 176 + (16 * i), new Float32Array(GPU.explodePos[i]));
+
+					//after last known explodePos is initialized, use dummyPos for rest
+					for(; i < 3; i++)
+						GPU.device.queue.writeBuffer(this.uniformBuffer, 176 + (16 * i), new Float32Array([9999,9999,9999]));
 				}
 
 				Update()
@@ -939,23 +899,7 @@
 
 				Render(commandPass)
 				{
-					commandPass.setBindGroup(0, this.mainBindGroup);					
-					commandPass.setBindGroup(2, this.textureBindGroup);									
-
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
-						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
-						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
-						this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
-						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
-					]));				
-					
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array(this.Ka));
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 96, new Float32Array(this.Ks));						
-					GPU.device.queue.writeBuffer(this.uniformBuffer, 108, new Float32Array([this.specularity]));
-
-					commandPass.setVertexBuffer(0, this.vertexBuffer);
-					commandPass.setIndexBuffer(this.indexBuffer, "uint16");					
-					commandPass.drawIndexed(this.indexes.length);
+					this.IndexDraw(commandPass);
 				}
 			}
 
@@ -986,6 +930,7 @@
 					this.numSpotLights = 0;
 										
 					this.Keys = [];
+					this.explodePos = []; //this is actually a 2d array, but don't want to set it as [[]] since that makes its length=1 on startup
 				}
 
 				async SlowStart()
@@ -1062,8 +1007,13 @@
 					console.log("parse vertices for tnt");
 					var result = ParseVertices(window.tnt, window.tntMtl);
 					var tnt = GPU.CreateObject(1, Tnt, [4, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
-					var tnt2 = GPU.CreateObject(1, Tnt, [-12, -2, 0], [0,0,0], [1,1,1], result, window.tntTexture);
-					var tnt3 = GPU.CreateObject(1, Tnt, [12, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);					
+					//for some reason adding this tnt messes up crater
+					var tnt2 = GPU.CreateObject(1, Tnt, [12, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+					//var tnt2 = GPU.CreateObject(1, Tnt, [-12, -2, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+					var tnt3 = GPU.CreateObject(1, Tnt, [23, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+
+					let dummyPos = [9999, 9999, 9999];
+					InitExplodePositions(dummyPos);
 
 					this.startTime = performance.now();
 					this.loops = 0;
@@ -1598,7 +1548,8 @@
 												
 						@fragment
 						fn fragmentMain(fsInput: VertexOutput) -> @location(0) vec4f
-						{														
+						{
+							//get the early returns out of the way first for better performance				
 							if(uni.isFire == 1u)
 							{
 								var v = -1.0 + 2.0 * fsInput.texCoords.xy / 1.0;
@@ -1625,7 +1576,7 @@
 							if(uni.isRope == 1u)
 							{
 								//flameWorldPos moves left. discard pixels as flameWorldPos reaches them
-								if (fsInput.worldSpace.x + 0.05 > fsInput.flameWorldPos.x)
+								if(fsInput.worldSpace.x + 0.05 > fsInput.flameWorldPos.x)
 								{
 									discard;
 								}
@@ -1651,24 +1602,28 @@
 							let normalTangent: vec3f = normalMapColor * 2.0 - 1.0;
 							var normalWS = normalize(TBN * normalTangent); //old texture example code
 
-							//there's weird errors when using fsInput.worldSpace or textureSample before dpdx, so I'm setting this variable early
+							//there's weird errors when using fsInput.worldSpace or textureSample near dpdx, so I'm setting this variable early
 							let textureValues = textureSample(texture, textureSampler, fsInput.texCoords);
+																																																						
+							for(var i = 0u; i < 3u; i++)
+							{							
+								// hard coded explosion radius for now, might customize later							
+								if(distance(fsInput.worldSpace, uni.explodePos[i]) < 7.92 && uni.isLaunchable == 0u && uni.isSmoke == 0u)
+								{
+									discard;
+								}
+							}
 
-							//get the early returns out of the way first for better performance
+							//need to set explodePos for each new crater as it is created
 							if(uni.isCrater == 1u && fsInput.worldSpace.y < -5)
 							{
 								return textureValues;
 							}
-															
-							for(var i = 0u; i < 3u; i++)
-							{								
-								//to fix the hollow explosion issues, try drawing a sphere at the explodePos and trimming the top
-								// hard coded explosion radius for now, might customize later
-								if(distance(fsInput.worldSpace, uni.explodePos[i]) < 8 && uni.isLaunchable == 0u && uni.isSmoke == 0u)
-								{
-									discard;
-								}								
-							}							
+							//discard top part of crater
+							else if(uni.isCrater == 1u)
+							{
+								discard;
+							}																	
 
 							if(uni.usingNormalMaps == 1u)
 							{
