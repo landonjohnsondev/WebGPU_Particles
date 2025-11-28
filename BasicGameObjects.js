@@ -88,21 +88,7 @@ class GameObject
 		this.name = "default";
 		this.id = 0;
 		this.prefab;
-		this.transform = new Transform();
-
-		// this.camBuff = GPU.device.createBuffer({
-		// 				label: 'camBuffer',
-		// 				size: 32,
-		// 				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-		// 			});
-
-		// 			this.camGroup = GPU.device.createBindGroup({
-		// 				layout: GPU.pipeline.getBindGroupLayout(1),
-		// 				label: 'camera',
-		// 				entries: [
-		// 					{ binding: 0, resource: {buffer: this.camBuff}},
-		// 				],
-		// 			});
+		this.transform = new Transform();		
 
 		this.uniformBufferSize = 240;
 		this.uniformBuffer = GPU.device.createBuffer({
@@ -110,6 +96,9 @@ class GameObject
 			size: this.uniformBufferSize,
 			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 		});
+
+		//initialize resolution
+		GPU.device.queue.writeBuffer(this.uniformBuffer, 228, new Float32Array([(window.innerHeight/window.innerWidth)]));
 	}
 
 	IndexDraw(commandPass)
@@ -127,6 +116,8 @@ class GameObject
 
 		if(this.timer != undefined)
 			GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));
+
+		GPU.device.queue.writeBuffer(this.uniformBuffer, 228, new Float32Array([0.5]));
 		
 		GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array(this.Ka));
 		GPU.device.queue.writeBuffer(this.uniformBuffer, 96, new Float32Array(this.Ks));						
@@ -188,6 +179,27 @@ class GameObject
 		return dist;
 	}
 
+	UpdateCell()
+	{
+		var cellWidth = 128;
+		newCellX = math.floor(this.pos[0] / cellWidth);
+		newCellY = math.floor(this.pos[1] / cellWidth);
+		newCellZ = math.floor(this.pos[2] / cellWidth);
+		
+		if(this.cellX != newCellX || this.cellY != newCellY || this.cellZ != newCellZ)
+		{
+			//remove item from list at that idx			
+			var curObj = GPU.cells[this.cellX][this.cellY][this.cellZ].objIndex;
+			GPU.cells[this.cellX][this.cellY][this.cellZ].objIndex = null;
+			GPU.cells[newCellX][newCellY][newCellZ].append(curObj);
+			//put item at new idx
+
+			this.cellX = newCellX;
+			this.cellY = newCellY;
+			this.cellZ = newCellZ;
+		}
+	}
+
 	SortByX(positions)
 	{
 		let sortedPositions = [];
@@ -217,20 +229,34 @@ class GameObject
 	Move()
 	{
 		var tempP = [0,0,0]
-		for(var i =0; i< 3;i ++)
+		for(var i = 0; i < 3; i++)
 		{
-			tempP[i] = this.loc[i];
+			tempP[i] = this.pos[i];
 			tempP[i] += this.velocity[i];
 			this.rot[i] += this.angVelocity[i];
 		}
+
+		//how to do collision: 
+		//if object is solid, check collision with solids for Clear and collision with triggers for OnTriggerHit
+		//if object is trigger, check collision with other triggers for OnTriggerHit. let solids do Clear checking
+
+		//Solid
+		//	check Clear
+		//	check triggers for OnTriggerHit
+		//Trigger
+		//	check triggers for OnTriggerHit
+
+		//call trigger hit on solid or trigger?
+
+		//means this is a Solid
 		if(!this.isTrigger)
 		{
 			var clear = true;
-			for(var so in m.Solid)
+			for(var so in GPU.Solid)
 			{
-				if(m.Solid[so] != this)
+				if(GPU.Solid[so] != this)
 				{
-					if(m.CheckCollision(tempP,this.collissionRadius,m.Solid[so].loc,m.Solid[so].collissionRadius))
+					if(GPU.CheckCollision(tempP, this.collissionRadius, GPU.Solid[so].pos, GPU.Solid[so].collissionRadius))
 					{
 						clear = false;
 						tempP.OnPhysicalHit(m.Solid[so])
@@ -247,17 +273,18 @@ class GameObject
 			} 
 			if(clear)
 			{
-			this.loc = tempP;
+				this.loc = tempP;
 			}
 		}
+		//means this is a trigger
 		else
 		{
-			this.loc = tempP;
+			this.pos = tempP;
 			for(var so in m.Trigger)
 			{
 				if(m.Trigger[so] != this)
 				{
-					if(m.CheckCollision(tempP,this.collissionRadius,m.Trigger[so].loc,m.Trigger[so].collissionRadius))
+					if(GPU.CheckCollision(tempP, this.collissionRadius, GPU.Trigger[so].pos, GPU.Trigger[so].collissionRadius))
 					{
 						tempP.OnTriggerHit(m.Trigger[so])
 						try

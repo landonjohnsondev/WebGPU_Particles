@@ -1,7 +1,14 @@
 <HTML>
 	<HEAD>
-		<BODY>
-			<canvas id="myCanvas" width="800" height="800"></canvas>
+		<BODY style="
+			margin: 0;
+			padding: 0;
+			overflow: hidden; /* prevents scrollbars */
+			height: 100%;
+			width: 100%;
+		"> 
+			<!-- this will have issues if window is resized -->
+			<canvas id="myCanvas" style="display: block; width: 100%; height: 100%;" width="1500" height="750"></canvas>
 			<audio id="boom" src="Audio/VineBoom.mp3"></audio>
 		</BODY>
 	
@@ -15,13 +22,19 @@
 
 		<!-- All classes, and WebGPU will be defined (or imported) here -->
 		 <!-- WRITE MAT4 MATRICES DIRECTLY INTO BUFFER, DON'T REORDER -->
-		<SCRIPT>			
+		<SCRIPT>
+
+			/*
+			HOW TO DO SPHERE COLLISION?
+			In crater class, check distance from center to Camera.
+			If within range + radius, disable collision, else enable collision.
+			*/
 			
 			function FrameUpdate()
 			{				
 				GPU.GetControllerInput();
 				GPU.UpdateAll();
-				GPU.RenderAll();
+				GPU.RenderAll(GPU.resolution);
 				averageTime = (performance.now() - GPU.startTime) / GPU.loops;
 				GPU.loops++;
 				// console.log("average loop time: " + averageTime + "ms");
@@ -67,7 +80,7 @@
 					GPU.device.queue.writeBuffer(GPU.Solid[i].uniformBuffer, initialOffset + (16 * idx), new Float32Array(pos));
 				for(var i in GPU.Trigger)
 					GPU.device.queue.writeBuffer(GPU.Trigger[i].uniformBuffer, initialOffset + (16 * idx), new Float32Array(pos));
-			}
+			}			
 
 			class PointLight extends Light
 			{
@@ -1008,6 +1021,8 @@
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 112, new Uint32Array([1]));
 
 					this.InitExplodePositions();
+
+					this.cam = GPU.GetObjectOfType(Camera);
 				}
 
 				InitExplodePositions()
@@ -1024,6 +1039,12 @@
 				Update()
 				{
 					this.ApplySceneGraph();
+
+					var distToCam = this.VectorDistance(this.pos, this.cam.pos);
+					if(distToCam < 8)					
+						this.cam.inSphere = true;
+					else
+						this.cam.inSphere = false;
 				}
 
 				Render(commandPass)
@@ -1060,6 +1081,10 @@
 										
 					this.Keys = [];
 					this.explodePos = []; //this is actually a 2d array, but don't want to set it as [[]] since that makes its length=1 on startup
+					
+					//2d array, with each elements being the list of objects at that pos
+					this.cellGrid = [[]];
+					this.resolution = window.innerHeight / window.innerWidth;
 				}
 
 				async SlowStart()
@@ -1210,10 +1235,10 @@
 					for(var i in this.Solid)				
 						this.Solid[i].Update();
 					for(var i in this.Trigger)
-						this.Trigger[i].Update();					
+						this.Trigger[i].Update();			
 				}
 				
-				RenderAll()
+				RenderAll(resolution)
 				{										
 					this.encoder = this.device.createCommandEncoder();
 										
@@ -1246,13 +1271,27 @@
 					for(var i in this.Solid)
 						this.Solid[i].Render(this.mainPass);
 					for(var i in this.Trigger)
-						this.Trigger[i].Render(this.mainPass);		
+						this.Trigger[i].Render(this.mainPass);					
+					this.CheckResolution(resolution);
 
 					this.mainPass.end();
 
 					this.mainCommandBuffer = this.encoder.finish();
 					this.device.queue.submit([this.mainCommandBuffer]);
 				}				
+
+				//update projection matrix in shader so the world doesn't look stretchedsda
+				CheckResolution(ratio)
+				{					
+					//console.log("change resolution to: " + ratio);
+					var offset = 228;
+					for(var i in this.Visual)				
+						GPU.device.queue.writeBuffer(this.Visual[i].uniformBuffer, offset, new Float32Array([ratio]));
+					for(var i in this.Solid)				
+						GPU.device.queue.writeBuffer(this.Solid[i].uniformBuffer, offset, new Float32Array([ratio]));
+					for(var i in this.Trigger)
+						GPU.device.queue.writeBuffer(this.Trigger[i].uniformBuffer, offset, new Float32Array([ratio]));
+				}
 				
 				CreateObject(type, prefab, pos, rot, scale, parserData, texture, normalMap, fade)
 				{			
@@ -1399,8 +1438,10 @@
 							isLaunchable: u32, //if this is unitialized, assume object is static
 							explodePos: array<vec3f, 3>,
 							isCrater: u32,
+
+							resolutionRatio: f32,
 						};						
-						@group(0) @binding(0) var<uniform> uni: Uniforms;				
+						@group(0) @binding(0) var<uniform> uni: Uniforms;			
 
 						struct VertexOutput
 						{
@@ -1494,7 +1535,7 @@
 
 							//column-major
 							var perspectiveM : mat4x4<f32> = mat4x4<f32>(
-									vec4<f32>(n/r,0,0,0),
+									vec4<f32>(uni.resolutionRatio * n/r,0,0,0), //uni.resolutionRatio * 
 									vec4<f32>(0, n/t, 0,0),
 									vec4<f32>(0,0,(f+n)/(f-n),1),
 									vec4<f32>(0,0,2*f*n/(f-n),1),
@@ -1685,7 +1726,9 @@
 												
 						@fragment
 						fn fragmentMain(fsInput: VertexOutput) -> @location(0) vec4f
-						{
+						{						
+							//return vec4f(vec3f(uni.resolutionRatio), 1);
+
 							//get the early returns out of the way first for better performance				
 							if(uni.isFire == 1u)
 							{
@@ -1760,7 +1803,7 @@
 							else if(uni.isCrater == 1u)
 							{
 								discard;
-							}																	
+							}										
 
 							if(uni.usingNormalMaps == 1u)
 							{
@@ -1771,7 +1814,7 @@
 							var specPower: vec3<f32>; //summation of all specularity light power
 							var dirLight: vec3<f32>; //summation of all directional light power							
 
-							lightPower = vec3(0,0,0);	
+							lightPower = vec3(0,0,0);
 							specPower = vec3(0,0,0);
 							dirLight = vec3(0,0,0);
 
@@ -2075,6 +2118,13 @@
 			window.addEventListener("gamepadconnected", (e) =>
 			{
 				console.log("Controller connected: " + e.gamepad);			
+			});
+
+			window.addEventListener("resize", () =>
+			{
+				console.log("Window resized!");
+				var ratio =  window.innerHeight / window.innerWidth;
+				GPU.resolution = ratio;
 			});
 		</SCRIPT>
 	</HEAD>
