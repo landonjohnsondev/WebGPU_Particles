@@ -22,13 +22,7 @@
 
 		<!-- All classes, and WebGPU will be defined (or imported) here -->
 		 <!-- WRITE MAT4 MATRICES DIRECTLY INTO BUFFER, DON'T REORDER -->
-		<SCRIPT>
-
-			/*
-			HOW TO DO SPHERE COLLISION?
-			In crater class, check distance from center to Camera.
-			If within range + radius, disable collision, else enable collision.
-			*/
+		<SCRIPT>			
 			
 			function FrameUpdate()
 			{				
@@ -80,7 +74,27 @@
 					GPU.device.queue.writeBuffer(GPU.Solid[i].uniformBuffer, initialOffset + (16 * idx), new Float32Array(pos));
 				for(var i in GPU.Trigger)
 					GPU.device.queue.writeBuffer(GPU.Trigger[i].uniformBuffer, initialOffset + (16 * idx), new Float32Array(pos));
-			}			
+			}		
+			
+			function InitCollision()
+			{												
+				for(var i in GPU.Solid)
+				{
+					if(!GPU.Solid[i] instanceof CustomObj)
+						continue;
+					
+					GPU.Solid[i].ApplySceneGraph();
+					GPU.Solid[i].SetCollisionEdges();					
+				}
+				for(var i in GPU.Trigger)
+				{
+					if(!GPU.Trigger[i] instanceof CustomObj)
+						continue;
+					
+					GPU.Trigger[i].ApplySceneGraph();
+					GPU.Trigger[i].SetCollisionEdges();
+				}
+			}
 
 			class PointLight extends Light
 			{
@@ -221,14 +235,14 @@
 						this.Ka = parserData[2];
 						this.Ks = parserData[3];
 						this.specularity = parserData[4];						
-					}
+					}					
 										
 					this.vertexBuffer = GPU.device.createBuffer({
 						label: "verticeBuffer",
 						size: this.vertices.byteLength,
 						usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
 					});
-					GPU.device.queue.writeBuffer(this.vertexBuffer, /*bufferOffset=*/0, this.vertices);
+					GPU.device.queue.writeBuffer(this.vertexBuffer, /*bufferOffset=*/0, this.vertices);					
 					
 					this.indexBuffer = GPU.device.createBuffer({
 						label: "indexBuffer",
@@ -237,7 +251,7 @@
 					});
 					GPU.device.queue.writeBuffer(this.indexBuffer, /*bufferOffset=*/0, this.indexes);
 
-					this.specularity = 1;											
+					this.specularity = 1;
 					
 					this.mainBindGroup = GPU.device.createBindGroup
 					({
@@ -262,8 +276,58 @@
 							{ binding: 2, resource: this.normalTextureObj.createView() },
 						],
 					});
-					this.timer = 0.0;					
+					this.timer = 0.0;										
 				}
+
+				SetCollisionEdges()
+				{
+					let minX = 9999;
+					let maxX = -9999;
+
+					let minY = 9999;
+					let maxY = -9999;
+
+					let minZ = 9999;
+					let maxZ = -9999;
+
+					for(let i = 0; i < this.vertices.length; i += GPU.vertexStride)
+					{
+						if(this.vertices[i] < minX)						
+							minX = this.vertices[i];						
+						if(this.vertices[i] > maxX)						
+							maxX = this.vertices[i];					
+
+						if(this.vertices[i+1] < minY)
+							minY = this.vertices[i+1];						
+						if(this.vertices[i+1] > maxY)
+							maxY = this.vertices[i+1];
+
+						if(this.vertices[i+2] < minZ)
+							minZ = this.vertices[i+2];
+						if(this.vertices[i+2] > maxZ)
+							maxZ = this.vertices[i+2];
+					}
+					
+					minX *= this.scale[0];
+					maxX *= this.scale[0];
+
+					minY *= this.scale[1];
+					maxY *= this.scale[1];					
+
+					minZ *= this.scale[2];
+					maxZ *= this.scale[2];
+
+					// console.log("minX: " + minX + ", maxX: " + maxX);
+					// console.log("minY: " + minY + ", maxY: " + maxY);
+					// console.log("minZ: " + minZ + ", maxZ: " + maxZ);
+
+					this.leftX = minX;
+					this.rightX = maxX;
+					this.topY = maxY;
+					this.bottomY = minY;
+					this.farZ = maxZ;
+					this.nearZ = minZ;					
+				}								
 
 				Update()
 				{	
@@ -294,174 +358,114 @@
 						entries: [
 							{ binding: 0, resource: {buffer: this.camBuff}},
 						],
-					});
-
+					});					
 					
 					this.moveSpeed = 0.06;
 					this.strafeSpeed = 0.06;
 					this.rotSpeed = 0.04;
 					this.elevateSpeed = 0.06;
 
+					this.isTrigger = false;
+					//this.collisionRadius = 5;
+
+					this.camRadius = 0.1;
+					this.sideLength = 1;
+					this.leftX = -this.camRadius;
+					this.rightX = this.camRadius;
+					this.bottomY = -this.sideLength;
+					this.topY = this.sideLength;
+					this.nearZ = -this.camRadius;
+					this.farZ = this.camRadius;
+
 					//set isLaunchable to true
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 160, new Uint32Array([1]));
-					this.vel = [0,0,0];					
+					this.vel = [0,0,0];
+					this.grounded = false;
+					this.jumpStrength = 0.4;
 
 					this.stickDeadzone = 0.05;
 				}
-				
-				LeftStickX()
-				{
-					if(GPU.controller == undefined)	
-						return 0.0;
-					return GPU.controller.axes[0];							
-				}
 
-				LeftStickY()
-				{
-					if(GPU.controller == undefined)	
-						return 0.0;
-					return GPU.controller.axes[1] * -1;
-				}
+				UpdateCollision()
+				{				
+					//leftX *= 1 at rotY=0;	
+					//leftX *= 0.5 at rotY=45deg;
 
-				RightStickX()
-				{					
-					if(GPU.controller == undefined)	
-						return 0.0;
-					return GPU.controller.axes[2];
-				}
+					//fix this tomorrow or test getting new min/max vertices at each position
+					this.leftX *= math.cos(this.rot[1]);
+					this.rightX *= math.cos(this.rot[1]);
+					this.bottomY *= math.cos(this.rot[1]);
+					this.topY *= math.cos(this.rot[1]);
+					this.nearZ *= math.cos(this.rot[1]);
+					this.farZ *= math.cos(this.rot[1]);
 
-				RightStickY()
-				{
-					if(GPU.controller == undefined)	
-						return 0.0;
-					return GPU.controller.axes[3] * -1;
-				}
-				
-				LeftTriggerHeld()
-				{
-					if(GPU.controller == undefined)	
-						return false;
-					return GPU.controller.buttons[6].pressed;
-				}
-
-				RightTriggerHeld()
-				{
-					if(GPU.controller == undefined)	
-						return false;
-					return GPU.controller.buttons[7].pressed;
-				}
-
-				LeftDpadHeld()
-				{
-					if(GPU.controller == undefined)	
-						return false;
-					return GPU.controller.buttons[14].pressed;
-				}
-
-				RightDpadHeld()
-				{
-					if(GPU.controller == undefined)	
-						return false;
-					return GPU.controller.buttons[15].pressed;
-				}
-
-				UpDpadHeld()
-				{
-					if(GPU.controller == undefined)	
-						return false;
-					return GPU.controller.buttons[12].pressed;
-				}
-
-				DownDpadHeld()
-				{
-					if(GPU.controller == undefined)	
-						return false;
-					return GPU.controller.buttons[13].pressed;
+					//how to check if diagonal line intersects with other cube?
+					//get leftmost and 2nd leftmost vertices, 
+					
+					//use sphere for camera?
 				}
 
 				Update()
 				{
 					this.ApplySceneGraph();
+					//this.UpdateCollision();
 					this.transform.doRotations(this.rot);
-
-					this.localPos[0] += this.vel[0];
-					this.localPos[1] += this.vel[1];
-					this.localPos[2] += this.vel[2];										
-
-					this.vel[0] *= 0.98;
-					this.vel[1] *= 0.98;
-					this.vel[2] *= 0.98;					
 
 					var leftX = this.LeftStickX();
 					var leftY = this.LeftStickY();
 					var rightX = this.RightStickX();
 					var rightY = this.RightStickY();
 
-					// console.log("leftStick (" + leftX + ", " + leftY + ")");
-					// console.log("rightStick (" + rightX + ", " + rightY + ")");
+					//reset x and z vel every frame, but retain gravity
+					this.vel[0] = 0;
+					this.vel[1] += (1/60) * -0.8;
+					this.vel[2] = 0;
 
 					//if a stick is being held
 					var rotIntensity = (math.abs(leftX) > this.stickDeadzone) ? math.abs(leftX) : 1.0;
 					if(GPU.CheckKey('D') || this.LeftStickX() > this.stickDeadzone || this.RightDpadHeld())
 						this.rot[1] += this.rotSpeed * rotIntensity;
 					if(GPU.CheckKey('A') || this.LeftStickX() < -this.stickDeadzone || this.LeftDpadHeld())
-						this.rot[1] -= this.rotSpeed * rotIntensity;
+						this.rot[1] -= this.rotSpeed * rotIntensity;					
+
+					if( (GPU.CheckKey(' ') || this.AHeld()) && this.grounded)
+					{
+						this.vel[1] += this.jumpStrength;
+						this.grounded = false;
+					}
 					
 					var moveIntensity = (math.abs(leftY) > this.stickDeadzone) ? math.abs(leftY) : 1.0;
 					if(GPU.CheckKey('W') || this.LeftStickY() > this.stickDeadzone || this.UpDpadHeld())
 					{
-						this.localPos[0] += this.transform.forward[0] * this.moveSpeed * moveIntensity;
-						this.localPos[1] += this.transform.forward[1] * this.moveSpeed * moveIntensity;
-						this.localPos[2] += this.transform.forward[2] * this.moveSpeed * moveIntensity;
+						this.vel[0] += this.transform.forward[0] * this.moveSpeed * moveIntensity;
+						this.vel[1] += this.transform.forward[1] * this.moveSpeed * moveIntensity;
+						this.vel[2] += this.transform.forward[2] * this.moveSpeed * moveIntensity;
 					}
 					if(GPU.CheckKey('S') || this.LeftStickY() < -this.stickDeadzone || this.DownDpadHeld())
 					{
-						this.localPos[0] -= this.transform.forward[0] * this.moveSpeed * moveIntensity;
-						this.localPos[1] -= this.transform.forward[1] * this.moveSpeed * moveIntensity;
-						this.localPos[2] -= this.transform.forward[2] * this.moveSpeed * moveIntensity;
-					}
-					if(GPU.CheckKey('Z') || this.LeftTriggerHeld())
-					{
-						this.localPos[1] -= this.elevateSpeed;
-					}
-					if(GPU.CheckKey('X') || this.RightTriggerHeld())
-					{
-						this.localPos[1] += this.elevateSpeed;
-					}
+						this.vel[0] -= this.transform.forward[0] * this.moveSpeed * moveIntensity;
+						this.vel[1] -= this.transform.forward[1] * this.moveSpeed * moveIntensity;
+						this.vel[2] -= this.transform.forward[2] * this.moveSpeed * moveIntensity;
+					}					
 
 					//STRAFE CONTROLS
 					//Left key pressed. idk why left key is % with Towle's code
 					var strafeIntensity = (math.abs(rightX) > this.stickDeadzone) ? math.abs(rightX) : 1.0;
 					if(GPU.CheckKey('%') || this.RightStickX() < -this.stickDeadzone)
 					{						
-						this.localPos[0] -= this.strafeSpeed * this.transform.right[0] * strafeIntensity;
-						this.localPos[1] -= this.strafeSpeed * this.transform.right[1] * strafeIntensity;
-						this.localPos[2] -= this.strafeSpeed * this.transform.right[2] * strafeIntensity;
+						this.vel[0] -= this.strafeSpeed * this.transform.right[0] * strafeIntensity;
+						this.vel[1] -= this.strafeSpeed * this.transform.right[1] * strafeIntensity;
+						this.vel[2] -= this.strafeSpeed * this.transform.right[2] * strafeIntensity;
 					}
 					//Right key pressed. this is right key apparently
 					if(GPU.CheckKey('\'') || this.RightStickX() > this.stickDeadzone)
 					{						
-						this.localPos[0] += this.strafeSpeed * this.transform.right[0] * strafeIntensity;
-						this.localPos[1] += this.strafeSpeed * this.transform.right[1] * strafeIntensity;
-						this.localPos[2] += this.strafeSpeed * this.transform.right[2] * strafeIntensity;
-					}					
-					
-					if(GPU.controller != undefined)
-					{
-						const A = GPU.controller.buttons[0];
-						const B = GPU.controller.buttons[1];
-						const X = GPU.controller.buttons[2];
-						const Y = GPU.controller.buttons[3];
-						//these buttons correspond to xbox controller buttons
-						if(A.pressed)						
-							console.log("pressed A");						
-						if(B.pressed)						
-							console.log("pressed B");						
-						if(X.pressed)						
-							console.log("pressed X");						
-						if(Y.pressed)					
-							console.log("pressed Y");						
+						this.vel[0] += this.strafeSpeed * this.transform.right[0] * strafeIntensity;
+						this.vel[1] += this.strafeSpeed * this.transform.right[1] * strafeIntensity;
+						this.vel[2] += this.strafeSpeed * this.transform.right[2] * strafeIntensity;
 					}
+					
+					this.MoveAndSlide();										
 				}
 
 				Render(commandPass)
@@ -877,7 +881,7 @@
 					console.log("parse vertices for rope");
 					var result = ParseVertices(window.rope1, window.rope1Mtl);
 					//keep scale as 1,1,1 for now otherwise flame is messed up since it's a child
-					var rope = GPU.CreateObject(1, Rope, [0,0,0], [0,0,0], [1,1,1], result);					
+					var rope = GPU.CreateObject(2, Rope, [0,0,0], [0,0,0], [1,1,1], result);					
 					rope.SetParent(this);					
 				}
 
@@ -1082,15 +1086,16 @@
 					this.Keys = [];
 					this.explodePos = []; //this is actually a 2d array, but don't want to set it as [[]] since that makes its length=1 on startup
 					
-					//2d array, with each elements being the list of objects at that pos
+					//2d array, with each elements being the list of objects at that pos. not used atm
 					this.cellGrid = [[]];
+
 					this.resolution = window.innerHeight / window.innerWidth;
 				}
 
 				async SlowStart()
 				{					
 					//you can specify less parameters than the function defines and JS will still run it
-					var camera = this.CreateObject(0, Camera, [3,-3,-2], [0,0,0]);										
+					var camera = this.CreateObject(0, Camera, [4,-1,-5], [0,0,0]);			
 
 					var pointLight;
 					for(let i = 0; i < 5; i++)
@@ -1154,11 +1159,13 @@
 					console.log("parse vertices for cube");
 					var result = ParseVertices(window.cube, window.cubeMtl);
 					var cube = GPU.CreateObject(1, CustomObj, [0.0, -2, 3], [0,0,0], [1,1,1], result, window.spiralTexture, window.spiralNormals);
-					cube.specularity = 100;										
+					cube.specularity = 100;						
+					
+					//console.log("cube.id: " + cube.id);
 					
 					// tnt Object
 					//tnt needs to be made near the end of slow start so it can set explodePos on all objects
-					console.log("parse vertices for tnt");
+					// console.log("parse vertices for tnt");
 					var result = ParseVertices(window.tnt, window.tntMtl);
 					var tnt = GPU.CreateObject(1, Tnt, [4, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
 					//for some reason adding this tnt messes up crater
@@ -1168,6 +1175,7 @@
 
 					let dummyPos = [9999, 9999, 9999];
 					InitExplodePositions(dummyPos);
+					InitCollision();
 
 					this.startTime = performance.now();
 					this.loops = 0;
@@ -1382,7 +1390,7 @@
 				static mouseH(event)
 				{
 					GPU.MouseClick(event);
-				}																
+				}								
 							
 				async SetupGPU()
 				{			
@@ -1752,6 +1760,23 @@
 								}
 								return fragColor;
 							}
+
+							if (uni.isSmoke == 1u)
+							{
+								var v = -1.0 + 2.0 * fsInput.texCoords.xy;
+								var org = vec3<f32>(0.0, -2.0, 4.0);
+								var dir = normalize(vec3<f32>(v.x * 1.6, -v.y, -1.5));
+
+								let sm = raymarch_smoke(org, dir);
+
+								if (sm.a < 0.01) {
+									discard;
+								}
+
+								return sm;
+															
+								//return vec4f(1.0, 1.0, 1.0, 0.5);
+							}
 							
 							if(uni.isRope == 1u)
 							{
@@ -1880,25 +1905,10 @@
 								
 								IL = max( dot(normalize(newNormal.xyz), normalize(light.direction)), 0.0 );
 								dirLight += IL * light.color.xyz;
-							}																																					
-
-							if (uni.isSmoke == 1u)
-							{
-								var v = -1.0 + 2.0 * fsInput.texCoords.xy;
-								var org = vec3<f32>(0.0, -2.0, 4.0);
-								var dir = normalize(vec3<f32>(v.x * 1.6, -v.y, -1.5));
-
-								let sm = raymarch_smoke(org, dir);
-
-								if (sm.a < 0.01) {
-									discard;
-								}
-
-								return sm;
-															
-								//return vec4f(1.0, 1.0, 1.0, 0.5);
-							}							
-
+							}
+								
+							//isSmoke got moved to the top of the fragment shader to return earlier for slightly better performance
+							
 							var textureUse : f32;
 							textureUse = f32(uni.usingTexture);
 							if(uni.usingTexture == 1u)

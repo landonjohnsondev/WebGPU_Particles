@@ -82,9 +82,9 @@ class GameObject
 		this.parent = null;
 
 		this.isTrigger = false;
-		this.collissionRadius = 1.0;
-		this.velocity = [0,0,0];
-		this.angVelocity = [0,0,0];
+		this.collisionRadius = 1.0;
+		this.vel = [0,0,0];
+		this.angVel = [0,0,0];
 		this.name = "default";
 		this.id = 0;
 		this.prefab;
@@ -99,6 +99,22 @@ class GameObject
 
 		//initialize resolution
 		GPU.device.queue.writeBuffer(this.uniformBuffer, 228, new Float32Array([(window.innerHeight/window.innerWidth)]));
+	}
+
+	GetCollisionRadius()
+	{		
+		var rightmostX = -9999;
+		for(let i = 0; i < this.vertices.length; i += GPU.vertexStride)
+		{
+			if(this.vertices[i] > rightmostX)			
+				rightmostX = this.vertices[i];
+		}		
+		this.ApplySceneGraph();
+		// console.log("scale: " + this.scale);
+		// console.log("localScale: " + this.localScale);
+		//assuming uniform scale
+		//console.log("collision radius is: " + rightmostX * math.max(this.scale[0], this.localScale[0]));
+		return rightmostX * this.scale[0];
 	}
 
 	IndexDraw(commandPass)
@@ -225,81 +241,310 @@ class GameObject
 		}		
 		return sortedPositions;			
 	}
+
+	LeftStickX()
+	{
+		if(GPU.controller == undefined)
+			return 0.0;
+		return GPU.controller.axes[0];
+	}
+
+	LeftStickY()
+	{
+		if(GPU.controller == undefined)
+			return 0.0;
+		return GPU.controller.axes[1] * -1;
+	}
+
+	RightStickX()
+	{
+		if(GPU.controller == undefined)
+			return 0.0;
+		return GPU.controller.axes[2];
+	}
+
+	RightStickY()
+	{
+		if(GPU.controller == undefined)
+			return 0.0;
+		return GPU.controller.axes[3] * -1;
+	}
+	
+	LeftTriggerHeld()
+	{
+		if(GPU.controller == undefined)
+			return false;
+		return GPU.controller.buttons[6].pressed;
+	}
+
+	RightTriggerHeld()
+	{
+		if(GPU.controller == undefined)
+			return false;
+		return GPU.controller.buttons[7].pressed;
+	}
+
+	LeftDpadHeld()
+	{
+		if(GPU.controller == undefined)	
+			return false;
+		return GPU.controller.buttons[14].pressed;
+	}
+
+	RightDpadHeld()
+	{
+		if(GPU.controller == undefined)	
+			return false;
+		return GPU.controller.buttons[15].pressed;
+	}
+
+	UpDpadHeld()
+	{
+		if(GPU.controller == undefined)	
+			return false;
+		return GPU.controller.buttons[12].pressed;
+	}
+
+	DownDpadHeld()
+	{
+		if(GPU.controller == undefined)	
+			return false;
+		return GPU.controller.buttons[13].pressed;
+	}
+
+	AHeld()
+	{
+		if(GPU.controller == undefined)	
+			return false;
+		
+		const A = GPU.controller.buttons[0];
+		if(A.pressed)
+			return true;
+		return false;						
+	}
+
+	BHeld()
+	{
+		if(GPU.controller == undefined)	
+			return false;
+
+		const B = GPU.controller.buttons[1];
+		if(B.pressed)
+			return true;
+		return false;		
+	}
+
+	XHeld()
+	{
+		if(GPU.controller == undefined)	
+			return false;
+
+		const X = GPU.controller.buttons[2];
+		if(X.pressed)
+			return true;
+		return false;		
+	}
+
+	YHeld()
+	{
+		if(GPU.controller == undefined)	
+			return false;
+
+		const Y = GPU.controller.buttons[3];
+		if(Y.pressed)
+			return true;
+		return false;		
+	}
+
+	CheckCollision(obj1, pos1, obj2, pos2)
+	{
+		// if(obj1.id == "ID0" || obj2.id == "ID0")
+		// 	console.log("checking collision with cam");
+
+		//adjust collision boundaries to be in world space
+
+		//these boundaries do not use rotation, so nonuniform meshes have jank collision
+		//get min/max x/y after changing to world space and applying rot?
+		var obj1LeftX = obj1.leftX + pos1[0];
+		var obj1RightX = obj1.rightX + pos1[0];
+
+		var obj1TopY = obj1.topY + pos1[1];
+		var obj1BottomY = obj1.bottomY + pos1[1];
+
+		var obj1FarZ = obj1.farZ + pos1[2];
+		var obj1NearZ = obj1.nearZ + pos1[2];
+
+		var obj2LeftX = obj2.leftX + pos2[0];
+		var obj2RightX = obj2.rightX + pos2[0];
+
+		var obj2TopY = obj2.topY + pos2[1];
+		var obj2BottomY = obj2.bottomY + pos2[1];
+
+		var obj2FarZ = obj2.farZ + pos2[2];
+		var obj2NearZ = obj2.nearZ + pos2[2];
+
+		// if(obj2.id == "ID11")
+		// {
+		// 	console.log("camLeftX: " + obj1LeftX + ", camRightX: " + obj1RightX);
+		// 	console.log("camTopY: " + obj1TopY + ", camBottomY: " + obj1BottomY);
+		// 	console.log("camNearZ: " + obj1NearZ + ", camFarZ: " + obj1FarZ);
+
+		// 	console.log("");
+
+		// 	console.log("obj2LeftX: " + obj2LeftX + ", obj2RightX: " + obj2RightX);
+		// 	console.log("obj2TopY: " + obj2TopY + ", obj2BottomY: " + obj2BottomY);
+		// 	console.log("obj2NearZ: " + obj2NearZ + ", obj2FarZ: " + obj2FarZ);
+
+		// 	console.log("");
+		// }
+
+		let xOverlap = (obj1LeftX < obj2RightX && obj1RightX > obj2LeftX);
+		let yOverlap = (obj1BottomY < obj2TopY && obj1TopY > obj2BottomY);
+		let zOverlap = (obj1NearZ < obj2FarZ && obj1FarZ > obj2NearZ);		
+		
+		if(xOverlap && yOverlap && zOverlap)					
+			return true;		
+		return false;
+	}
 				
+	//move stops an object immediately when it hits something
 	Move()
 	{
-		var tempP = [0,0,0]
+		var newX = [0,0,0];
+		var newZ = [0,0,0];
+		var newY = [0,0,0];
 		for(var i = 0; i < 3; i++)
 		{
-			tempP[i] = this.pos[i];
-			tempP[i] += this.velocity[i];
-			this.rot[i] += this.angVelocity[i];
+			this.rot[i] += this.angVel[i];
+			newX[i] = this.pos[i];
+			newY[i] = this.pos[i];
+			newZ[i] = this.pos[i];
 		}
 
-		//how to do collision: 
-		//if object is solid, check collision with solids for Clear and collision with triggers for OnTriggerHit
-		//if object is trigger, check collision with other triggers for OnTriggerHit. let solids do Clear checking
+		newX[0] += this.vel[0];		
+		newY[1] += this.vel[1];
+		newZ[2] += this.vel[2];		
 
-		//Solid
-		//	check Clear
-		//	check triggers for OnTriggerHit
-		//Trigger
-		//	check triggers for OnTriggerHit
-
-		//call trigger hit on solid or trigger?
-
-		//means this is a Solid
+		//means this is a Solid, but it is always true for all objects currently
 		if(!this.isTrigger)
 		{
-			var clear = true;
+			var clearX = true;			
+			var clearY = true;
+			var clearZ = true;
 			for(var so in GPU.Solid)
 			{
-				if(GPU.Solid[so] != this)
-				{
-					if(GPU.CheckCollision(tempP, this.collissionRadius, GPU.Solid[so].pos, GPU.Solid[so].collissionRadius))
-					{
-						clear = false;
-						tempP.OnPhysicalHit(m.Solid[so])
-						try
-						{
-							m.Solid[so].OnPhysicalHit(tempP)
-						}
-						catch (error)
-						{
-							//Assume other object has been destroyed
-						}
-					}
+				if(GPU.Solid[so] == this)
+					continue;				
+				
+				if(this.CheckCollision(this, newX, GPU.Solid[so], GPU.Solid[so].pos))
+				{					
+					clearX = false;					
+					clearZ = false;
 				}
-			} 
-			if(clear)
-			{
-				this.loc = tempP;
+
+				if(this.CheckCollision(this, newZ, GPU.Solid[so], GPU.Solid[so].pos))
+				{
+					clearZ = false;					
+					clearX = false;
+				}
+
+				if(this.CheckCollision(this, newY, GPU.Solid[so], GPU.Solid[so].pos))
+				{
+					clearY = false;
+					this.grounded = true;
+					this.vel[1] = 0;
+				}
 			}
+						
+			//check each dimension separately to allow sliding on certain dimension
+			if(clearX)			
+				this.localPos[0] = newX[0];
+			if(clearY)
+				this.localPos[1] = newY[1];					
+			if(clearZ)
+				this.localPos[2] = newZ[2];
+			//this.pos = this.localPos;
 		}
-		//means this is a trigger
+		//object moving is a trigger
 		else
 		{
-			this.pos = tempP;
-			for(var so in m.Trigger)
+			this.pos = newXZ;
+			for(var tr in GPU.Trigger)
 			{
-				if(m.Trigger[so] != this)
-				{
-					if(GPU.CheckCollision(tempP, this.collissionRadius, GPU.Trigger[so].pos, GPU.Trigger[so].collissionRadius))
-					{
-						tempP.OnTriggerHit(m.Trigger[so])
-						try
-						{
-							m.Trigger[so].OnTriggerHit(tempP)
-						}
-						catch (error)
-						{
-							//Assume other object has been destroyed
-						}
-					}
-				}
-			} 
+				if(GPU.Trigger[tr] == this)
+					continue;
+
+				if(this.CheckCollision(this, newXZ, GPU.Trigger[tr], GPU.Trigger[tr].pos))
+					console.log("TRIGGER ENTERED");				
+			}
 		}
-	}
+	}	
+
+	//if an object hits something, move along the axes that are still movable
+	MoveAndSlide()
+	{
+		var newX = [0,0,0];
+		var newZ = [0,0,0];
+		var newY = [0,0,0];
+		for(var i = 0; i < 3; i++)
+		{
+			this.rot[i] += this.angVel[i];
+			newX[i] = this.pos[i];
+			newY[i] = this.pos[i];
+			newZ[i] = this.pos[i];
+		}
+
+		newX[0] += this.vel[0];		
+		newY[1] += this.vel[1];
+		newZ[2] += this.vel[2];		
+
+		//means this is a Solid, but it is always true for all objects currently
+		if(!this.isTrigger)
+		{
+			var clearX = true;			
+			var clearY = true;
+			var clearZ = true;
+			for(var so in GPU.Solid)
+			{
+				if(GPU.Solid[so] == this)
+					continue;				
+				
+				if(this.CheckCollision(this, newX, GPU.Solid[so], GPU.Solid[so].pos))				
+					clearX = false;									
+
+				if(this.CheckCollision(this, newZ, GPU.Solid[so], GPU.Solid[so].pos))				
+					clearZ = false;				
+
+				if(this.CheckCollision(this, newY, GPU.Solid[so], GPU.Solid[so].pos))
+				{
+					clearY = false;
+					this.grounded = true;
+					this.vel[1] = 0;
+				}
+			}
+						
+			//check each dimension separately to allow sliding on certain dimension
+			if(clearX)			
+				this.localPos[0] = newX[0];
+			if(clearY)
+				this.localPos[1] = newY[1];					
+			if(clearZ)
+				this.localPos[2] = newZ[2];			
+		}
+		//object moving is a trigger
+		else
+		{
+			this.pos = newXZ;
+			for(var tr in GPU.Trigger)
+			{
+				if(GPU.Trigger[tr] == this)
+					continue;
+
+				if(this.CheckCollision(this, newXZ, GPU.Trigger[tr], GPU.Trigger[tr].pos))
+					console.log("TRIGGER ENTERED");				
+			}
+		}
+	}	
 
 	ApplySceneGraph()
 	{
@@ -318,6 +563,12 @@ class GameObject
 		}
 
 		this.pos = [ this.worldMatrix[0][3], this.worldMatrix[1][3], this.worldMatrix[2][3] ];
+		
+		//global x scale is the length of the xVector (the first column of the matrix), y for second column, z for third column
+		var xScale = math.hypot(this.worldMatrix[0][0], this.worldMatrix[1][0], this.worldMatrix[2][0]);
+		var yScale = math.hypot(this.worldMatrix[0][1], this.worldMatrix[1][1], this.worldMatrix[2][1]);
+		var zScale = math.hypot(this.worldMatrix[0][2], this.worldMatrix[1][2], this.worldMatrix[2][2]);
+		this.scale = [ xScale, yScale, zScale ];
 	}
 
 	//create dummy texture and dummy normal map if none are provided
