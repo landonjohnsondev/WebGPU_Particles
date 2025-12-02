@@ -1,3 +1,12 @@
+<!--
+NEXT:
+• Crater collision
+• New collision shapes?
+• New particles
+• Skybox
+• Game stuff
+-->
+
 <HTML>
 	<HEAD>
 		<BODY style="
@@ -9,10 +18,20 @@
 		"> 
 			<!-- this will have issues if window is resized -->
 			<canvas id="myCanvas" style="display: block; width: 100%; height: 100%;" width="1500" height="750"></canvas>
+			<h1 id="title">Explosive Maneuvers</h1>
+			
+			<button id="start" style="top: 40%;" onclick=GPU.StartGame()>
+				<h1>Start Game</h1>
+			</button>
+
+			<button id="credits" style="top: 50%;">
+				<h1>Credits</h1>
+			</button>
+
 			<audio id="boom" src="Audio/VineBoom.mp3"></audio>
 		</BODY>
 	
-	
+		<link rel="stylesheet" href="styles.css">
 		<script src="./BasicGameObjects.js"></script>
 		<script src="./Models.js"></script>
 		<script src="./Textures.js"></script>
@@ -362,13 +381,12 @@
 					
 					this.moveSpeed = 0.06;
 					this.strafeSpeed = 0.06;
-					this.rotSpeed = 0.04;
-					this.elevateSpeed = 0.06;
+					this.rotSpeed = 0.04;					
 
 					this.isTrigger = false;
 					//this.collisionRadius = 5;
 
-					this.camRadius = 0.1;
+					this.camRadius = 0.5;
 					this.sideLength = 1;
 					this.leftX = -this.camRadius;
 					this.rightX = this.camRadius;
@@ -419,7 +437,7 @@
 					//reset x and z vel every frame, but retain gravity
 					this.vel[0] = 0;
 					this.vel[1] += (1/60) * -0.8;
-					this.vel[2] = 0;
+					this.vel[2] = 0;										
 
 					//if a stick is being held
 					var rotIntensity = (math.abs(leftX) > this.stickDeadzone) ? math.abs(leftX) : 1.0;
@@ -464,8 +482,58 @@
 						this.vel[1] += this.strafeSpeed * this.transform.right[1] * strafeIntensity;
 						this.vel[2] += this.strafeSpeed * this.transform.right[2] * strafeIntensity;
 					}
-					
-					this.MoveAndSlide();										
+														
+					var ignoreCollision = false;
+					var standingOnCrater = false;
+
+					//what's with teleporting? it's from the correction formula being applied while in the air. fix later					
+					//how to make collision ingnoring code cleaner?
+
+					if(GPU.explodePos.length > 0)
+					{
+						//console.log("cam distToExplodePos[0]: " + this.VectorDistance(this.pos, GPU.explodePos[0]));
+						//console.log("GPU.explodePos[0]: " + GPU.explodePos[0]);
+					}														
+
+					//falling into crater
+					if(GPU.explodePos.length > 0 && 
+						this.VectorDistance(this.pos, GPU.explodePos[0]) < 6.5)
+					{						
+						ignoreCollision = true;
+						console.log("setting ignore collision!");		
+						if(this.craterPos == undefined)
+						{							
+							this.craterPos = [ GPU.explodePos[0][0], GPU.explodePos[0][1], GPU.explodePos[0][2] ];
+							console.log("set crater pos to: " + this.craterPos);
+						}
+					}
+					//moving along crater
+					else if(GPU.explodePos.length > 0 && 
+						this.pos[1] < GPU.explodePos[0][1] &&
+						this.Between( this.VectorDistance(this.pos, GPU.explodePos[0]), 6.5, 8.5 ) )
+					{
+						standingOnCrater = true;						
+						//console.log("standing on crater!");
+						if(this.craterPos == undefined)					
+							this.craterPos = [ GPU.explodePos[0][0], GPU.explodePos[0][1], GPU.explodePos[0][2] ];						
+					}
+					//exiting crater
+					else if(this.craterPos != undefined && this.Between( this.bottomY + this.pos[1], this.GetCraterY(this.pos[0], this.pos[2]), this.craterPos[1]) )
+					{
+						ignoreCollision = true;
+					}					
+
+					// console.log("ignoreCollision: " + ignoreCollision);
+					// console.log("standingOnCrater: " + standingOnCrater);
+					this.MoveAndSlide(ignoreCollision, standingOnCrater);
+				}
+
+				GetCraterY(x, z)
+				{
+					var craterXZ = [x, this.craterPos[1], z];
+					var xzDistToCrater = this.VectorDistance(craterXZ, this.craterPos);
+					var craterY = this.craterPos[1] - math.sqrt(64 - xzDistToCrater**2);
+					return craterY;
 				}
 
 				Render(commandPass)
@@ -866,7 +934,7 @@
 					this.flashTimer = 0.0;
 					this.flashInterval = 0.15;
 					this.flashOn = 1;
-					this.explodeTimer = 2;
+					this.explodeTimer = 0.5;
 					this.isFlashing = false;	
 					Tnt.numTnt++;
 					this.tntIdx = Tnt.numTnt - 1;				
@@ -881,8 +949,8 @@
 					console.log("parse vertices for rope");
 					var result = ParseVertices(window.rope1, window.rope1Mtl);
 					//keep scale as 1,1,1 for now otherwise flame is messed up since it's a child
-					var rope = GPU.CreateObject(2, Rope, [0,0,0], [0,0,0], [1,1,1], result);					
-					rope.SetParent(this);					
+					var rope = GPU.CreateObject(2, Rope, [0,0,0], [0,0,0], [1,1,1], result);			
+					rope.SetParent(this);
 				}
 
 				SortByTntIdx(tntList)
@@ -1062,10 +1130,10 @@
 			{
 				constructor()
 				{				
-					this.isReady = false;
-					this.SetupGPU().then(() => {this.SlowStart();})
+					this.isReady = false;					
 					this.specularity = 50.0;
-					
+					//this.SetupGPU().then(() => {this.SlowStart();})
+
 					this.Visual = [];
 					this.Solid = [];
 					this.Trigger = [];
@@ -1090,6 +1158,43 @@
 					this.cellGrid = [[]];
 
 					this.resolution = window.innerHeight / window.innerWidth;
+					
+					this.gameStarted = false;
+					//start WebGPU rendering, which makes the black background
+					(async () =>
+					{						
+						await this.SetupGPU();
+						
+						//comment this out to show title screen
+						//this.StartGame();
+
+						requestAnimationFrame(FrameUpdate);
+					})();		
+										
+				}
+
+				StartGame()
+				{
+					console.log("starting game...");
+					this.HideMenu();					
+					this.gameStarted = true;
+					this.SlowStart();							
+					console.log("game started");
+				}
+
+				ShowMenu()
+				{
+					//this also makes the menu not interactable
+					document.getElementById("title").style.visibility = "visible";
+					document.getElementById("start").style.visibility = "visible";
+					document.getElementById("credits").style.visibility = "visible";	
+				}
+
+				HideMenu()
+				{
+					document.getElementById("title").style.visibility = "hidden";
+					document.getElementById("start").style.visibility = "hidden";
+					document.getElementById("credits").style.visibility = "hidden";					
 				}
 
 				async SlowStart()
@@ -1169,9 +1274,9 @@
 					var result = ParseVertices(window.tnt, window.tntMtl);
 					var tnt = GPU.CreateObject(1, Tnt, [4, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
 					//for some reason adding this tnt messes up crater
-					var tnt2 = GPU.CreateObject(1, Tnt, [12, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+					//var tnt2 = GPU.CreateObject(1, Tnt, [12, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
 					//var tnt2 = GPU.CreateObject(1, Tnt, [-12, -2, 0], [0,0,0], [1,1,1], result, window.tntTexture);
-					var tnt3 = GPU.CreateObject(1, Tnt, [23, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+					//var tnt3 = GPU.CreateObject(1, Tnt, [23, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
 
 					let dummyPos = [9999, 9999, 9999];
 					InitExplodePositions(dummyPos);
@@ -1179,7 +1284,7 @@
 
 					this.startTime = performance.now();
 					this.loops = 0;
-					requestAnimationFrame(FrameUpdate);
+					//requestAnimationFrame(FrameUpdate);
 				}		
 
 				//need to fetch the controller every frame or the input does not update
@@ -1249,17 +1354,21 @@
 				RenderAll(resolution)
 				{										
 					this.encoder = this.device.createCommandEncoder();
-										
+
+					const colorAttachment = 
+					{
+						view: this.context.getCurrentTexture().createView(),
+						loadOp: "clear",
+						clearValue: { r:0.0, g:0, b:0, a:1 },
+						storeOp: "store"
+					};
+					if(this.gameStarted)
+						colorAttachment.clearValue = {r: 0, g:0.8, b:1, a:1};
+
 					this.mainPass = this.encoder.beginRenderPass
 					({
 						label: 'mainRenderPass',
-						colorAttachments:
-						[{
-							view: this.context.getCurrentTexture().createView(),
-							loadOp: "clear",
-							clearValue: { r:0.0, g:0.8, b:1, a:1 },
-							storeOp: "store"
-						}],
+						colorAttachments: [colorAttachment],
 						depthStencilAttachment: {
 							view: this.depthTextureView,								
 							depthClearValue: 1.0,
@@ -1400,11 +1509,12 @@
 						throw new Error("No appropriate GPUAdapter found.");
 					}
 					
+					console.log("waiting for device");
 					this.device = await this.adapter.requestDevice(); 
 					if (!this.device)
 					{
-						fail('need a browser that supports WebGPU'); 
-						return;					
+						fail('need a browser that supports WebGPU');
+						return;
 					}
 					console.log("WebGPU device found!");
 					
@@ -1630,7 +1740,7 @@
 							var pos = ogPos;					
 							var glowed = 0u;
 							
-							for(var i = 0; i < 64; i++)
+							for(var i = 0; i < 40; i++)
 							{
 								d = scene(pos) + eps;								
 								pos = pos + d * dir;
@@ -1652,7 +1762,8 @@
 						
 						// SMOKE STUFF
 						
-						fn smoke_density(pos: vec3<f32>) -> f32 {
+						fn smoke_density(pos: vec3<f32>) -> f32 
+						{
 							let t = uni.timer * 0.3;
 
 							let base = 1.0 - smoothstep(0.0, 2, length(pos.xz));
@@ -1670,7 +1781,7 @@
 						fn raymarch_smoke(org : vec3<f32>, dir : vec3<f32>) -> vec4<f32>
 						{
 							let steps = 64;
-							let stepSize = 0.08;
+							let stepSize = 0.15;
 
 							var pos = org;
 							var alpha = 0.0;
@@ -1679,7 +1790,6 @@
 							for (var i = 0; i < steps; i = i + 1)
 							{
 								pos = pos + dir * stepSize;
-
 								let density = smoke_density(pos);
 
 								if (density <= 0.0001) 
@@ -1818,8 +1928,7 @@
 									discard;
 								}
 							}
-
-							//need to set explodePos for each new crater as it is created
+							
 							if(uni.isCrater == 1u && fsInput.worldSpace.y < -5)
 							{
 								return textureValues;
@@ -1876,11 +1985,10 @@
 									halfVector = halfVec(-LPosSafe, normalize(fsInput.vectorToCam).xyz);
 									specPower += pow(
 														max( dot(normalize(reflection), normalize(fsInput.vectorToCam) ), 0),
-													uni.shiny) * light.color.xyz;													
+														uni.shiny
+													) * light.color.xyz;		
 								}
-							}
-
-							var lightingFactor: f32;
+							}							
 
 							for(var i = 0u; i < min(lightSystem.numSpotLights, 10u); i++)
 							{																											
@@ -1946,7 +2054,7 @@
 						addressMoveV: 'mirror-repeat',
 						minFilter: 'nearest',
 						maxFilter: 'linear',
-					});				
+					});
 
 					//LAYOUT VARS
 
@@ -2014,7 +2122,7 @@
 							{
 								binding: 1, //ComplexLightSystem
 								visibility: GPUShaderStage.FRAGMENT,
-								buffer: { type: 'uniform', } 
+								buffer: { type: 'uniform', }
 							},							
 						],
 					});
@@ -2116,18 +2224,23 @@
 						usage: GPUTextureUsage.RENDER_ATTACHMENT,
 					});
 					this.depthTextureView = this.depthTexture.createView();
+
+					this.ShowMenu();
 				}
 			}							
 			
-			GPU = new WebGPU();
-			var canvas = document.getElementById("myCanvas");			
+			//do title screen stuff here, then make GPU with event listener			
+			//try delaying slow start and rendering black in WebGPU until a button is clicked?
+			var canvas = document.getElementById("myCanvas");		
+			
 			canvas.addEventListener("click", WebGPU.mouseH);
+			GPU = new WebGPU();			
 
 			window.onkeydown = WebGPU.keyD;
 			window.onkeyup = WebGPU.keyU;	
 			window.addEventListener("gamepadconnected", (e) =>
 			{
-				console.log("Controller connected: " + e.gamepad);			
+				console.log("Controller connected: " + e.gamepad);
 			});
 
 			window.addEventListener("resize", () =>

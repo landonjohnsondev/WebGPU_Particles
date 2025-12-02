@@ -195,6 +195,7 @@ class GameObject
 		return dist;
 	}
 
+	//not used atm. would be for a faster collision checking system
 	UpdateCell()
 	{
 		var cellWidth = 128;
@@ -316,7 +317,7 @@ class GameObject
 	{
 		if(GPU.controller == undefined)	
 			return false;
-		
+
 		const A = GPU.controller.buttons[0];
 		if(A.pressed)
 			return true;
@@ -362,6 +363,11 @@ class GameObject
 		// 	console.log("checking collision with cam");
 
 		//adjust collision boundaries to be in world space
+
+		//for collision at any angle, get the camera's vertices, then vertice pair for each edge
+		//get slope between the pair, then for each of the other object's vertices, check if the edge equation at that x is greater
+		//also check that the lower edge is less at that x. if so, the vertice is between the two edges and colliding
+		//use -reciprocal for other edge equations
 
 		//these boundaries do not use rotation, so nonuniform meshes have jank collision
 		//get min/max x/y after changing to world space and applying rot?
@@ -478,10 +484,17 @@ class GameObject
 					console.log("TRIGGER ENTERED");				
 			}
 		}
-	}	
+	}
+
+	Between(num, low, high)
+	{
+		if(num >= low && num <= high)
+			return true;
+		return false;
+	}
 
 	//if an object hits something, move along the axes that are still movable
-	MoveAndSlide()
+	MoveAndSlide(ignoreCollison, standingOnCrater)
 	{
 		var newX = [0,0,0];
 		var newZ = [0,0,0];
@@ -494,9 +507,45 @@ class GameObject
 			newZ[i] = this.pos[i];
 		}
 
+		if(standingOnCrater && this.vel[1] < 0)
+		{			
+			this.vel[1] = 0;
+			var adjustedY = [ this.pos[0] + this.vel[0], 0, this.pos[2] + this.vel[2] ];
+			this.grounded = true;
+			
+			//get xz distance from center as formula "x"
+			var levelCraterPos = [ this.craterPos[0], this.craterPos[1], this.craterPos[2] ];
+			// console.log("GPU.explodePos[0]: " + GPU.explodePos[0]);
+			// console.log("this.craterPos: " + this.craterPos);
+			levelCraterPos[1] = this.pos[1];
+			// console.log("levelCraterPos: " + levelCraterPos);
+			// console.log("this.pos: " + this.pos);
+			var xzDistToCrater = this.VectorDistance(this.pos, levelCraterPos);
+			//console.log("xzDistToCrater: " + xzDistToCrater);
+			//console.log("correction below crater: " + math.sqrt(64 - xzDistToCrater**2));
+			adjustedY[1] = this.craterPos[1] - math.sqrt(64 - xzDistToCrater**2);			
+			//idk why you need *4 to not see under crater
+			adjustedY[1] += 3*this.camRadius;			
+
+			this.localPos = [ adjustedY[0], adjustedY[1], adjustedY[2] ];			
+			//KEEP IN MIND THIS MEANS YOU NEVER COLLIDE WITH OTHER OBJECTS WHILE IN THE CRATER			
+			return;
+		}
+		//if not standing on crater (dist under crater), need to prevent camera from colliding with ground when exiting crater, how?
+		//else if camera world space bottom y is under ground y, ignore collision? then you fall through
+
 		newX[0] += this.vel[0];		
 		newY[1] += this.vel[1];
-		newZ[2] += this.vel[2];		
+		newZ[2] += this.vel[2];
+		
+		if(ignoreCollison)
+		{
+			//console.log("ignore collision!");
+			this.localPos[0] += this.vel[0];
+			this.localPos[1] += this.vel[1];
+			this.localPos[2] += this.vel[2];
+			return;
+		}
 
 		//means this is a Solid, but it is always true for all objects currently
 		if(!this.isTrigger)
@@ -509,8 +558,8 @@ class GameObject
 				if(GPU.Solid[so] == this)
 					continue;				
 				
-				if(this.CheckCollision(this, newX, GPU.Solid[so], GPU.Solid[so].pos))				
-					clearX = false;									
+				if(this.CheckCollision(this, newX, GPU.Solid[so], GPU.Solid[so].pos))
+					clearX = false;
 
 				if(this.CheckCollision(this, newZ, GPU.Solid[so], GPU.Solid[so].pos))				
 					clearZ = false;				
@@ -521,13 +570,13 @@ class GameObject
 					this.grounded = true;
 					this.vel[1] = 0;
 				}
-			}
+			}			
 						
 			//check each dimension separately to allow sliding on certain dimension
 			if(clearX)			
 				this.localPos[0] = newX[0];
 			if(clearY)
-				this.localPos[1] = newY[1];					
+				this.localPos[1] = newY[1];				
 			if(clearZ)
 				this.localPos[2] = newZ[2];			
 		}
