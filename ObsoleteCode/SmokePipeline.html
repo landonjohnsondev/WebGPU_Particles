@@ -484,20 +484,32 @@ NEXT:
 					}
 														
 					var ignoreCollision = false;
-					var standingOnCrater = false;															
+					var standingOnCrater = false;
 
-					//falling into crater, 6.5 is kinda hardcoded based on camRadius so you don't fall over and over
+					//what's with teleporting? it's from the correction formula being applied while in the air. fix later					
+					//how to make collision ingnoring code cleaner?
+
+					if(GPU.explodePos.length > 0)
+					{
+						//console.log("cam distToExplodePos[0]: " + this.VectorDistance(this.pos, GPU.explodePos[0]));
+						//console.log("GPU.explodePos[0]: " + GPU.explodePos[0]);
+					}														
+
+					//falling into crater
 					if(GPU.explodePos.length > 0 && 
 						this.VectorDistance(this.pos, GPU.explodePos[0]) < 6.5)
 					{						
-						ignoreCollision = true;						
-						if(this.craterPos == undefined)						
-							this.craterPos = [ GPU.explodePos[0][0], GPU.explodePos[0][1], GPU.explodePos[0][2] ];						
+						ignoreCollision = true;
+						console.log("setting ignore collision!");		
+						if(this.craterPos == undefined)
+						{							
+							this.craterPos = [ GPU.explodePos[0][0], GPU.explodePos[0][1], GPU.explodePos[0][2] ];
+							console.log("set crater pos to: " + this.craterPos);
+						}
 					}
-					//moving along crater, allow jumping
+					//moving along crater
 					else if(GPU.explodePos.length > 0 && 
 						this.pos[1] < GPU.explodePos[0][1] &&
-						this.vel[1] < 0 &&
 						this.Between( this.VectorDistance(this.pos, GPU.explodePos[0]), 6.5, 8.5 ) )
 					{
 						standingOnCrater = true;						
@@ -544,13 +556,13 @@ NEXT:
 					let maxUV = 2;
 					//these triangles form a square, which is the area for the fire "texture"				
 					this.vertices = new Float32Array([
-						 -maxDim,maxDim,0, 0,0,0, -maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
-						-maxDim,-maxDim,0, 0,0,0, -maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
-						  maxDim,maxDim,0, 0,0,0,  maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
+						 -maxDim,maxDim,0,-maxUV, maxUV,
+						-maxDim,-maxDim,0,-maxUV,-maxUV,
+						  maxDim,maxDim,0,maxUV, maxUV,
 						 
-						-maxDim,-maxDim,0, 0,0,0,  maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
-						 maxDim,-maxDim,0, 0,0,0, -maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
-						  maxDim,maxDim,0, 0,0,0, -maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
+						-maxDim,-maxDim,0,maxUV,-maxUV,
+						 maxDim,-maxDim,0,-maxUV,-maxUV,
+						  maxDim,maxDim,0,-maxUV, maxUV,
 					]);
 					
 					this.vertexBuffer = GPU.device.createBuffer({
@@ -558,7 +570,9 @@ NEXT:
 						size: this.vertices.byteLength,
 						usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
 					});
-					GPU.device.queue.writeBuffer(this.vertexBuffer, 0, this.vertices);					
+					GPU.device.queue.writeBuffer(this.vertexBuffer, 0, this.vertices);
+
+					
 					
 					if(this.fade == 1)
 					{
@@ -568,31 +582,33 @@ NEXT:
 					{
 						let randStartTime = math.random()*100;
 						this.timer = randStartTime;
-					}								
+					}
+
 					
-					this.billboardGroup = GPU.device.createBindGroup
+					
+					this.smokeGroup = GPU.device.createBindGroup
 					({
-						layout: GPU.pipeline.getBindGroupLayout(0),
-						label: "billboardGroup",
+						layout: GPU.smokePipeline.getBindGroupLayout(0),
+						label: "smokeGroup",
 						entries:
 						[
-							{ binding: 0, resource: {buffer: this.uniformBuffer}},
-							{ binding: 1, resource: {buffer: GPU.lightBuffer}},
+							{ binding: 0, resource: {buffer: this.uniformBuffer}},					
 						],
 					});					
 					
-					this.SetupTextures(rawTexture, normalMap);
-					this.textureBindGroup = GPU.device.createBindGroup
-					({
-						layout: GPU.pipeline.getBindGroupLayout(2),
-						label: 'customObjTextureGroup',
-						entries:	
-						[																
-							{ binding: 0, resource: this.textureObj.createView() },							
-							{ binding: 1, resource: GPU.sampler },
-							{ binding: 2, resource: this.normalTextureObj.createView() },
+					this.camBuff = GPU.device.createBuffer({
+						label: 'camBuffer',
+						size: 32,
+						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+					});
+
+					this.camGroup = GPU.device.createBindGroup({
+						layout: GPU.smokePipeline.getBindGroupLayout(1),
+						label: 'smokeCameraGroup',
+						entries: [
+							{ binding: 0, resource: {buffer: this.camBuff}},
 						],
-					});					
+					});
 										
 					//assumes camera has already been made
 					this.camera = GPU.GetObjectOfType(Camera);					
@@ -629,7 +645,24 @@ NEXT:
 											
 				Render(commandPass)
 				{					
-					this.ParticleDraw(commandPass);				
+					//this.ParticleDraw(commandPass);
+					commandPass.setBindGroup(0, this.smokeGroup);									
+					commandPass.setBindGroup(1, this.camGroup);	
+					
+					console.log("rendering smoke");
+					
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
+						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
+						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
+						this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
+						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
+					]));			
+										
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 64, new Float32Array([this.timer]));
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array([(window.innerHeight/window.innerWidth)]));
+					
+					commandPass.setVertexBuffer(0, this.vertexBuffer);
+					commandPass.draw(6,1,0,0);
 				}
 			}
 			
@@ -694,7 +727,7 @@ NEXT:
 					//set isFire to true in the shader
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([1]));			
 
-					this.smoke = GPU.CreateObject(2, Smoke, [0,1.3,0], [0,0,0], [0.8, 0.8, 0.8], 0, 0, 0, 0);
+					this.smoke = GPU.CreateObject(2, Smoke, [0,1,0], [0,0,0], [1, 1, 1], 0, 0, 0, 0);
 					this.smoke.SetParent(this);
 				}																				
 
@@ -1027,9 +1060,9 @@ NEXT:
 							var smoke1 = GPU.CreateObject(
 								2, 
 								Smoke, 
-								[this.pos[0], this.pos[1]+8, this.pos[2]],
+								[this.pos[0], this.pos[1], this.pos[2]],
 								[0,0,0],
-								[10, 10, 10], 
+								[7, 7, 7], 
 								0, 0, 0, 1);
 							// Spawns 3 flames for now
 							for(let i = 0; i < 3; i++)
@@ -1380,14 +1413,54 @@ NEXT:
 						this.Visual[i].Render(this.mainPass);
 					for(var i in this.Solid)
 						this.Solid[i].Render(this.mainPass);
-					for(var i in this.Trigger)					
-						this.Trigger[i].Render(this.mainPass);											
+					for(var i in this.Trigger)
+					{						
+						if(!(this.Trigger[i] instanceof Smoke))
+						{
+							console.log("rendering for " + this.Trigger[i].id + " in main pass");
+							this.Trigger[i].Render(this.mainPass);
+						}
+					}
 					this.CheckResolution(resolution);
 
 					this.mainPass.end();
-					this.mainCommandBuffer = this.encoder.finish();														
+					//this.mainCommandBuffer = this.encoder.finish();				
+
+					//console.log("START SMOKE PASS");
+					this.smokePass = this.encoder.beginRenderPass
+					({
+						label: "smokePass",
+						colorAttachments: [
+							{
+								view: curView,
+								loadOp: "load",								
+								storeOp: "store"
+							}
+						],			
+						depthStencilAttachment: {
+							view: this.depthTextureView,								
+							depthClearValue: 1.0,
+							depthLoadOp: "load",
+							depthStoreOp: "store",
+
+							stencilClearValue: 0,
+							stencilLoadOp: 'load',
+							stencilStoreOp: 'store',
+						},
+					});
+
+					this.smokePass.setPipeline(this.smokePipeline);
+					for(var i in this.Trigger)
+					{
+						if(GPU.Trigger[i] instanceof Smoke)
+						{							
+							this.Trigger[i].Render(this.smokePass);
+						}
+					}
+					this.smokePass.end();
+					this.commandBuffer = this.encoder.finish();
 					
-					this.device.queue.submit([this.mainCommandBuffer]);
+					this.device.queue.submit([this.commandBuffer]);
 				}
 
 				//update projection matrix in shader so the world doesn't look stretchedsda
@@ -1866,7 +1939,7 @@ NEXT:
 								var v = -1.0 + 2.0 * fsInput.texCoords.xy;
 								var org = vec3<f32>(0.0, -2.0, 4.0);
 								//smoke explodes to size of screen. how to widen it a ton?
-								var dir = normalize(vec3<f32>(v.x * 1.6, -v.y, -1.6));
+								var dir = normalize(vec3<f32>(v.x * 0.2, -v.y/3, -0.6));
 
 								let sm = raymarch_smoke(org, dir);
 
@@ -2020,7 +2093,171 @@ NEXT:
 							}
 						}`
 					});
-					console.log("Created simple shader");										
+					console.log("Created simple shader");
+
+					this.smokeModule = this.device.createShaderModule
+					({
+						label: "smokeModule",						
+						code: `	
+
+						struct SmokeUniforms
+						{				
+							matrix: mat4x4<f32>,							
+							timer: f32,
+							resolutionRatio: f32,
+						}
+						@group(0) @binding(0) var<uniform> uni: SmokeUniforms;
+
+						struct VertexOutput
+						{
+							@builtin(position) position: vec4f,
+							@location(1) uv: vec2f,
+							@location(2) worldSpace: vec3f,
+						}
+
+						struct CameraInfo
+						{
+							translation: vec3f,
+							rotation: vec3f,
+						}
+						@group(1) @binding(0) var<uniform> myCam: CameraInfo;
+
+						fn MoveCamera(vert: vec4f) -> vec4f
+						{
+							var translationM : mat4x4<f32> = mat4x4<f32>(
+									vec4<f32>(1,0,0,0),
+									vec4<f32>(0,1,0,0),
+									vec4<f32>(0,0,1,0),
+									vec4<f32>(-1.0*myCam.translation.x, -1.0*myCam.translation.y, -1.0*myCam.translation.z, 1)
+								);									
+							
+							//rotate world opposite of camera
+							var c : vec3f = cos(-1.0*myCam.rotation);
+							var s : vec3f = sin(-1.0*myCam.rotation);
+							var rotM : mat4x4<f32> = mat4x4<f32>(
+								vec4<f32>(c.y, 0.0, -s.y, 0.0),
+								vec4<f32>(0.0, 1.0, 0.0, 0.0),
+								vec4<f32>(s.y, 0.0, c.y, 0.0),
+								vec4<f32>(0.0, 0.0, 0.0, 1.0),
+							);
+
+							//make everything orbit around camera
+							return rotM * translationM * vert;
+						}
+
+						fn PerspectiveProjection(vert: vec4f) -> vec4f
+						{
+							var n: f32 = 0.001;
+							var r: f32 = 0.001;
+							var t: f32 = 0.001;
+							var f: f32 = 5000.0;
+
+							//column-major
+							var perspectiveM : mat4x4<f32> = mat4x4<f32>(
+									vec4<f32>(uni.resolutionRatio * n/r,0,0,0), //uni.resolutionRatio * 
+									vec4<f32>(0, n/t, 0,0),
+									vec4<f32>(0,0,(f+n)/(f-n),1),
+									vec4<f32>(0,0,2*f*n/(f-n),1),
+								);
+
+							return perspectiveM * vert;
+						}
+
+						// SMOKE STUFF
+						
+						fn smoke_density(pos: vec3<f32>) -> f32 
+						{
+							let t = uni.timer * 0.3;
+
+							let base = 1.0 - smoothstep(0.0, 2, length(pos.xz));
+
+							let n = noise(pos * 1.0 + vec3<f32>(0.0, t, 0.0));
+
+							var d = base * n;
+
+							d *= smoothstep(-1.0, 0.0, pos.y);
+							d *= (2.5 - clamp(pos.y, 0.0, 2));
+
+							return max(d, 0.0);
+						}
+						
+						fn raymarch_smoke(org : vec3<f32>, dir : vec3<f32>) -> vec4<f32>
+						{
+							let steps = 64;
+							let stepSize = 0.15;
+
+							var pos = org;
+							var alpha = 0.0;
+							var color = vec3<f32>(0.0);
+
+							for (var i = 0; i < steps; i = i + 1)
+							{
+								pos = pos + dir * stepSize;
+								let density = smoke_density(pos);
+
+								if (density <= 0.0001) 
+								{ 
+									continue; 
+								}
+
+								let a = density * 0.15;
+								alpha = alpha + (1.0 - alpha) * a;
+
+								color = color + vec3<f32>(0.6) * a;
+
+								if (alpha > 0.98) 
+								{ 
+									break; 
+								}
+							}
+
+							return vec4<f32>(color, alpha);
+						}
+
+						fn noise(pos: vec3<f32>) -> f32
+						{
+							var cell_coord = floor(pos);
+							var hash_seed = dot(cell_coord, vec3<f32>(1.0, 57.0, 21.0)) + vec4<f32>(0.0, 27.0, 21.0, 78.0);
+							var interp = cos((pos - cell_coord) * acos(-1.0)) * -0.5 + 0.5;
+							hash_seed  = mix(sin(cos(hash_seed)*hash_seed), sin(cos(1+hash_seed)*(1+hash_seed)), interp.x);
+							var blended_xy = mix(hash_seed.xz, hash_seed.yw, interp.y);
+							hash_seed.x = blended_xy.x;
+							hash_seed.y = blended_xy.y;
+							return mix(hash_seed.x, hash_seed.y, interp.z);
+						}
+
+						@vertex
+						fn smokeVertexMain(@location(0) pos: vec3f, @location(1) uv: vec2f) -> VertexOutput
+						{
+							var vOutput: VertexOutput;							
+							
+							let worldPos4: vec4<f32> = uni.matrix * vec4f(pos, 1.0);
+							vOutput.worldSpace = worldPos4.xyz;
+							vOutput.position = PerspectiveProjection(MoveCamera(worldPos4));
+
+							vOutput.uv = uv;
+							vOutput.uv = vOutput.uv * 0.5 + 0.5;
+							return vOutput;
+						}
+
+						@fragment
+						fn smokeFragmentMain(fsInput: VertexOutput) -> @location(0) vec4f
+						{							
+							return vec4f(1);
+
+							var v = -1.0 + 2.0 * fsInput.uv.xy;
+							var org = vec3<f32>(0.0, -2.0, 4.0);
+							var dir = normalize(vec3<f32>(v.x * 0.4, -v.y/3, -1.5));
+
+							let sm = raymarch_smoke(org, dir);
+
+							if (sm.a < 0.01) {
+								discard;
+							}
+
+							return sm;
+						}`
+					});
 					
 					//BUFFER VARS
 					
@@ -2099,7 +2336,28 @@ NEXT:
 							},
 						],
 					};
-								
+					
+					this.smokeVertexBufferLayout = 
+					{
+						label: 'smokeVertexBufferLayout',
+						arrayStride: GPU.smokeStride*4,
+						attributes:
+						[					
+							//position	
+							{
+								format: "float32x3",
+								offset: 0,
+								shaderLocation: 0,
+							},
+							//uv
+							{
+								format: "float32x2",
+								offset: 4*3,
+								shaderLocation: 1,
+							}
+						]
+					}
+
 					this.mainGroupLayout = this.device.createBindGroupLayout
 					({
 						label: 'mainGroupLayout',
@@ -2114,6 +2372,19 @@ NEXT:
 								binding: 1, //ComplexLightSystem
 								visibility: GPUShaderStage.FRAGMENT,
 								buffer: { type: 'uniform', }
+							},							
+						],
+					});
+
+					this.smokeGroupLayout = this.device.createBindGroupLayout
+					({
+						label: 'smokeGroupLayout',
+						entries:
+						[
+							{
+								binding: 0, //Uniform
+								visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+								buffer: { type: 'uniform', }, 
 							},							
 						],
 					});
@@ -2158,7 +2429,13 @@ NEXT:
 					({
 						label: 'mainPipelineLayout',
 						bindGroupLayouts: [ this.mainGroupLayout, this.cameraGroupLayout, this.textureGroupLayout ]
-					});										
+					});			
+					
+					this.smokePipelineLayout = this.device.createPipelineLayout
+					({
+						label: "smokePipelineLayout",
+						bindGroupLayouts: [ this.smokeGroupLayout, this.cameraGroupLayout ]
+					})
 
 					//PIPELINE VARS					
 					
@@ -2207,7 +2484,51 @@ NEXT:
 						},						
 					});
 					console.log("Created pipeline");
-										
+					
+					this.smokePipeline = this.device.createRenderPipeline
+					({
+						label: "Smoke pipeline",
+						layout: this.smokePipelineLayout,
+						vertex: 
+						{
+							module: this.smokeModule,
+							entryPoint: "smokeVertexMain",
+							buffers: [this.smokeVertexBufferLayout],
+						},
+						fragment:
+						{
+							module: this.smokeModule,
+							entryPoint: "smokeFragmentMain",
+							targets: [{
+								format: this.presentationFormat,
+								blend: {
+									color: {
+										srcFactor: "src-alpha",
+										dstFactor: "one-minus-src-alpha",
+										operation: "add",
+									},
+									alpha: {
+									  srcFactor: "one",
+									  dstFactor: "one-minus-src-alpha",
+									  operation: "add",
+									},
+								},
+								writeMask: GPUColorWrite.ALL,
+								}]
+						},
+						primitive:
+						{							
+							topology: "triangle-list",
+							cullMode: "none",							
+						},						
+						depthStencil: 
+						{
+							format: "depth24plus-stencil8",
+							depthWriteEnabled: false,
+							depthCompare: "always",
+						},						
+					});
+
 					this.depthTexture = this.device.createTexture({
 						label: 'depthTexture',
 						size: [this.canvas.width, this.canvas.height],

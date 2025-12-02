@@ -507,6 +507,10 @@ class GameObject
 			newZ[i] = this.pos[i];
 		}
 
+		console.log("this.vel[1]: " + this.vel[1]);
+		console.log("standingOnCrater: " + standingOnCrater);
+		console.log("ignoreCollision: " + ignoreCollison);
+
 		if(standingOnCrater && this.vel[1] < 0)
 		{			
 			this.vel[1] = 0;
@@ -514,19 +518,13 @@ class GameObject
 			this.grounded = true;
 			
 			//get xz distance from center as formula "x"
-			var levelCraterPos = [ this.craterPos[0], this.craterPos[1], this.craterPos[2] ];
-			// console.log("GPU.explodePos[0]: " + GPU.explodePos[0]);
-			// console.log("this.craterPos: " + this.craterPos);
-			levelCraterPos[1] = this.pos[1];
-			// console.log("levelCraterPos: " + levelCraterPos);
-			// console.log("this.pos: " + this.pos);
-			var xzDistToCrater = this.VectorDistance(this.pos, levelCraterPos);
-			//console.log("xzDistToCrater: " + xzDistToCrater);
-			//console.log("correction below crater: " + math.sqrt(64 - xzDistToCrater**2));
+			var levelCraterPos = [ this.craterPos[0], this.craterPos[1], this.craterPos[2] ];			
+			levelCraterPos[1] = this.pos[1];			
+			var xzDistToCrater = this.VectorDistance(this.pos, levelCraterPos);			
 			adjustedY[1] = this.craterPos[1] - math.sqrt(64 - xzDistToCrater**2);			
-			//idk why you need *4 to not see under crater
 			adjustedY[1] += 3*this.camRadius;			
 
+			console.log("set localPos to " + [ adjustedY[0], adjustedY[1], adjustedY[2] ]);
 			this.localPos = [ adjustedY[0], adjustedY[1], adjustedY[2] ];			
 			//KEEP IN MIND THIS MEANS YOU NEVER COLLIDE WITH OTHER OBJECTS WHILE IN THE CRATER			
 			return;
@@ -540,7 +538,7 @@ class GameObject
 		
 		if(ignoreCollison)
 		{
-			//console.log("ignore collision!");
+			console.log("set localPos to += vel!");
 			this.localPos[0] += this.vel[0];
 			this.localPos[1] += this.vel[1];
 			this.localPos[2] += this.vel[2];
@@ -573,10 +571,15 @@ class GameObject
 			}			
 						
 			//check each dimension separately to allow sliding on certain dimension
-			if(clearX)			
+			if(clearX)
+			{
 				this.localPos[0] = newX[0];
+			}
 			if(clearY)
+			{
+				console.log("set y to normal newY of " + newY[1]);
 				this.localPos[1] = newY[1];				
+			}
 			if(clearZ)
 				this.localPos[2] = newZ[2];			
 		}
