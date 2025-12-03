@@ -19,8 +19,9 @@ button
     left: 50%; 
     top: 20%; 
     transform: translateX(-50%); 
-    color: red; 
+    color: red;
     font-size: 50pt;
+    white-space: nowrap; /*prevents multi-line text on small resolutions*/
 }
 
 button:hover

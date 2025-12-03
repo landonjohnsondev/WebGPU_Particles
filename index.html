@@ -1,9 +1,7 @@
 <!--
 NEXT:
-• Crater collision
-• New collision shapes?
+• Multiple crater collision
 • New particles
-• Skybox
 • Game stuff
 -->
 
@@ -41,8 +39,8 @@ NEXT:
 
 		<!-- All classes, and WebGPU will be defined (or imported) here -->
 		 <!-- WRITE MAT4 MATRICES DIRECTLY INTO BUFFER, DON'T REORDER -->
-		<SCRIPT>			
-			
+		<SCRIPT>						
+
 			function FrameUpdate()
 			{				
 				GPU.GetControllerInput();
@@ -261,7 +259,7 @@ NEXT:
 						size: this.vertices.byteLength,
 						usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
 					});
-					GPU.device.queue.writeBuffer(this.vertexBuffer, /*bufferOffset=*/0, this.vertices);					
+					GPU.device.queue.writeBuffer(this.vertexBuffer, /*bufferOffset=*/0, this.vertices);	
 					
 					this.indexBuffer = GPU.device.createBuffer({
 						label: "indexBuffer",
@@ -387,7 +385,7 @@ NEXT:
 					//this.collisionRadius = 5;
 
 					this.camRadius = 0.5;
-					this.sideLength = 1;
+					this.sideLength = 1.5;
 					this.leftX = -this.camRadius;
 					this.rightX = this.camRadius;
 					this.bottomY = -this.sideLength;
@@ -424,7 +422,10 @@ NEXT:
 				}
 
 				Update()
-				{
+				{					
+					if(!GPU.gameLoaded)
+						return;
+
 					this.ApplySceneGraph();
 					//this.UpdateCollision();
 					this.transform.doRotations(this.rot);
@@ -486,41 +487,63 @@ NEXT:
 					var ignoreCollision = false;
 					var standingOnCrater = false;															
 
+					this.closestCraterPos = this.ClosestCraterPos();
 					//falling into crater, 6.5 is kinda hardcoded based on camRadius so you don't fall over and over
 					if(GPU.explodePos.length > 0 && 
-						this.VectorDistance(this.pos, GPU.explodePos[0]) < 6.5)
-					{						
-						ignoreCollision = true;						
-						if(this.craterPos == undefined)						
-							this.craterPos = [ GPU.explodePos[0][0], GPU.explodePos[0][1], GPU.explodePos[0][2] ];						
+						this.VectorDistance(this.pos, this.closestCraterPos) < 6.5)		
+					{			
+						ignoreCollision = true;																					
 					}
 					//moving along crater, allow jumping
 					else if(GPU.explodePos.length > 0 && 
-						this.pos[1] < GPU.explodePos[0][1] &&
+						this.pos[1] < this.closestCraterPos[1] &&
 						this.vel[1] < 0 &&
-						this.Between( this.VectorDistance(this.pos, GPU.explodePos[0]), 6.5, 8.5 ) )
+						this.Between( this.VectorDistance(this.pos, this.closestCraterPos), 6.5, 8.5 ) )					
 					{
-						standingOnCrater = true;						
-						//console.log("standing on crater!");
-						if(this.craterPos == undefined)					
-							this.craterPos = [ GPU.explodePos[0][0], GPU.explodePos[0][1], GPU.explodePos[0][2] ];						
+						standingOnCrater = true;												
 					}
 					//exiting crater
-					else if(this.craterPos != undefined && this.Between( this.bottomY + this.pos[1], this.GetCraterY(this.pos[0], this.pos[2]), this.craterPos[1]) )
+					else if(this.closestCraterPos != undefined && this.Between( this.bottomY + this.pos[1], this.GetCraterY(this.pos[0], this.pos[2]), this.closestCraterPos[1]) )					
 					{
-						ignoreCollision = true;
-					}					
+						ignoreCollision = true;					
+					}
 
 					// console.log("ignoreCollision: " + ignoreCollision);
 					// console.log("standingOnCrater: " + standingOnCrater);
 					this.MoveAndSlide(ignoreCollision, standingOnCrater);
 				}
 
+				ClosestCraterPos()
+				{
+					if(GPU.explodePos.length == 0)
+					{
+						console.log("No craters found for ClosestCrater!");
+						return undefined;
+					}
+
+					let minDist = 9999;
+					let closestIdx = -1;
+					for(let i = 0; i < GPU.explodePos.length; i++)
+					{
+						var dist = this.VectorDistance(this.pos, GPU.explodePos[i]);
+						console.log("dist to explodePos[" + i + "]: " + dist);
+						console.log("this.pos: " + this.pos);
+						console.log("explodePos[" + i + "]: " + GPU.explodePos[i]);
+						if(dist < minDist)
+						{
+							minDist = dist;
+							closestIdx = i;
+						}
+					}					
+					//console.log("return explodePos[" + closestIdx + "]: " + GPU.explodePos[closestIdx]);
+					return [ GPU.explodePos[closestIdx][0], GPU.explodePos[closestIdx][1], GPU.explodePos[closestIdx][2] ];
+				}
+
 				GetCraterY(x, z)
 				{
-					var craterXZ = [x, this.craterPos[1], z];
-					var xzDistToCrater = this.VectorDistance(craterXZ, this.craterPos);
-					var craterY = this.craterPos[1] - math.sqrt(64 - xzDistToCrater**2);
+					var craterXZ = [x, this.closestCraterPos[1], z];
+					var xzDistToCrater = this.VectorDistance(craterXZ, this.closestCraterPos);
+					var craterY = this.closestCraterPos[1] - math.sqrt(64 - xzDistToCrater**2);
 					return craterY;
 				}
 
@@ -783,7 +806,7 @@ NEXT:
 																					
 					this.burnPositions = this.GetRopeEdges();
 					this.leftmostBurnPos = this.burnPositions[0];
-					this.rightmostBurnPos = this.burnPositions[1];														
+					this.rightmostBurnPos = this.burnPositions[1];									
 					
 					this.camera = GPU.GetObjectOfType(Camera);
 					this.litFire = 0; // 0 if not, 1 if you have lit the fire
@@ -1113,14 +1136,108 @@ NEXT:
 				}
 			}
 
+			class Fade extends GameObject
+			{				
+				constructor(pos, rot, scale)
+				{
+					//not intended to be used
+					super(pos, rot, scale);
+
+					this.mainBindGroup = GPU.device.createBindGroup
+					({
+						layout: GPU.pipeline.getBindGroupLayout(0),
+						label: 'customObjMainGroup',
+						entries:
+						[
+							{ binding: 0, resource: { buffer: this.uniformBuffer }},
+							{ binding: 1, resource: { buffer: GPU.lightBuffer}},
+						],
+					});
+
+					this.dummyVertices = new Float32Array([
+						0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0,
+						0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0,
+						0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0,
+						0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0,
+						0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0,
+						0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0,
+					]);
+
+					this.SetupTextures(undefined, undefined);
+					this.textureBindGroup = GPU.device.createBindGroup
+					({
+						layout: GPU.pipeline.getBindGroupLayout(2),
+						label: 'customObjTextureGroup',
+						entries:
+						[																
+							{ binding: 0, resource: this.textureObj.createView() },							
+							{ binding: 1, resource: GPU.sampler },
+							{ binding: 2, resource: this.normalTextureObj.createView() },
+						],
+					});
+
+					this.vertexBuffer = GPU.device.createBuffer({
+						label: "verticeBuffer",
+						size: this.dummyVertices.byteLength,
+						usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+					});
+					GPU.device.queue.writeBuffer(this.vertexBuffer, /*bufferOffset=*/0, this.dummyVertices);															
+
+
+					this.fadeOpacity = 0.0;
+					//set fadeVal
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 232, new Float32Array([this.fadeOpacity]));
+					
+					//set isFade to true
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 236, new Uint32Array([1]));
+					
+					this.fadeState = "none";
+				}				
+
+				Update()
+				{
+					//nothing for now
+				}
+
+				Render(commandPass)
+				{
+					commandPass.setBindGroup(0, this.mainBindGroup);		
+					commandPass.setBindGroup(2, this.textureBindGroup);
+					
+					if(this.fadeState == "fadeOut")
+						this.fadeOpacity = math.min(this.fadeOpacity + (1/60), 1);
+					else if(this.fadeState == "fadeIn")
+						this.fadeOpacity = math.max(this.fadeOpacity - (1/60), 0);
+					
+					if(this.fadeState == "fadeOut" && this.fadeOpacity > 1)		
+					{											
+						this.fadeState = "fadeIn";
+
+						if(this.isFirstFade)
+						{
+							GPU.SlowStart();
+							this.isFirstFade = false;
+							GPU.gameLoaded = true;
+							document.body.style.cursor = "none";
+						}
+					}
+					// console.log("fadeState: " + this.fadeState);
+					// console.log("fadeOpacity: " + this.fadeOpacity);
+
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 232, new Float32Array([this.fadeOpacity]));
+
+					commandPass.setVertexBuffer(0, this.vertexBuffer);
+					commandPass.draw(6);
+				}
+			}
+
 			//basically the main class
 			class WebGPU
 			{
 				constructor()
 				{				
 					this.isReady = false;					
-					this.specularity = 50.0;
-					//this.SetupGPU().then(() => {this.SlowStart();})
+					this.specularity = 50.0;					
 
 					this.Visual = [];
 					this.Solid = [];
@@ -1148,17 +1265,21 @@ NEXT:
 
 					this.resolution = window.innerHeight / window.innerWidth;
 					
-					this.gameStarted = false;
-					//start WebGPU rendering, which makes the black background
+					this.gameLoaded = false;
+					//start WebGPU rendering here
 					(async () =>
 					{						
 						await this.SetupGPU();
 						
+
+						this.camera = this.CreateObject(0, Camera, [4,-1,-5], [0,0,0]);						
 						//comment this out to show title screen
 						//remove comment to skip title screen
-						//this.StartGame();
+						//this.StartGame();						
 
 						requestAnimationFrame(FrameUpdate);
+						//basically a fade manager
+						var fade = this.CreateObject(0, Fade, [0,0,0], [0,0,0]);
 					})();
 										
 				}
@@ -1167,8 +1288,9 @@ NEXT:
 				{
 					console.log("starting game...");
 					this.HideMenu();					
-					this.gameStarted = true;
-					this.SlowStart();							
+					GPU.GetObjectOfType(Fade).fadeState = "fadeOut";
+					GPU.GetObjectOfType(Fade).isFirstFade = true;
+					//this.SlowStart();
 					console.log("game started");
 				}
 
@@ -1190,7 +1312,10 @@ NEXT:
 				async SlowStart()
 				{					
 					//you can specify less parameters than the function defines and JS will still run it
-					var camera = this.CreateObject(0, Camera, [4,-1,-5], [0,0,0]);			
+
+					//var camera = this.CreateObject(0, Camera, [4,-1,-5], [0,0,0]);			
+					this.camera.pos = [4,-1,-5];
+					console.log("set cam pos");
 
 					var pointLight;
 					for(let i = 0; i < 5; i++)
@@ -1263,11 +1388,9 @@ NEXT:
 					// console.log("parse vertices for tnt");
 					var result = ParseVertices(window.tnt, window.tntMtl);
 					var tnt = GPU.CreateObject(1, Tnt, [4, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
-										
-					//for some reason adding this tnt messes up crater
-					//var tnt2 = GPU.CreateObject(1, Tnt, [12, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
-					//var tnt2 = GPU.CreateObject(1, Tnt, [-12, -2, 0], [0,0,0], [1,1,1], result, window.tntTexture);
-					//var tnt3 = GPU.CreateObject(1, Tnt, [23, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+															
+					var tnt2 = GPU.CreateObject(1, Tnt, [12, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);					
+					var tnt3 = GPU.CreateObject(1, Tnt, [23, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
 
 					let dummyPos = [9999, 9999, 9999];
 					InitExplodePositions(dummyPos);
@@ -1351,10 +1474,10 @@ NEXT:
 					{
 						view: curView,
 						loadOp: "clear",
-						clearValue: { r:0.0, g:0, b:0, a:1 },
+						clearValue: { r:0.2, g:0.4, b:0.6, a:1 },
 						storeOp: "store"
 					};
-					if(this.gameStarted)
+					if(this.gameLoaded)
 						colorAttachment.clearValue = {r: 0, g:0.8, b:1, a:1};
 
 					//console.log("START MAIN PASS");
@@ -1372,21 +1495,30 @@ NEXT:
 							stencilLoadOp: 'clear',
 							stencilStoreOp: 'store',
 						},
-					});					
+					});
 					this.mainPass.setPipeline(this.pipeline);
 															
 					//might change this order later if we want to fix the root of the smoke problem
 					for(var i in this.Visual)
-						this.Visual[i].Render(this.mainPass);
+					{
+						if(!(this.Visual[i] instanceof Fade))
+							this.Visual[i].Render(this.mainPass);
+					}
 					for(var i in this.Solid)
 						this.Solid[i].Render(this.mainPass);
 					for(var i in this.Trigger)					
-						this.Trigger[i].Render(this.mainPass);											
-					this.CheckResolution(resolution);
+						this.Trigger[i].Render(this.mainPass);								
+					this.CheckResolution(resolution);	
+					
+					//render fade last so transparency works
+					for(var i in this.Visual)
+					{
+						if(this.Visual[i] instanceof Fade)
+							this.Visual[i].Render(this.mainPass);
+					}
 
 					this.mainPass.end();
-					this.mainCommandBuffer = this.encoder.finish();														
-					
+					this.mainCommandBuffer = this.encoder.finish();
 					this.device.queue.submit([this.mainCommandBuffer]);
 				}
 
@@ -1551,6 +1683,8 @@ NEXT:
 							isCrater: u32,
 
 							resolutionRatio: f32,
+							fadeVal: f32,
+							isFade: u32,
 						};						
 						@group(0) @binding(0) var<uniform> uni: Uniforms;			
 
@@ -1805,7 +1939,7 @@ NEXT:
 						
 						//the parameters correspond to the vertexBufferLayout object						
 						@vertex						
-						fn vertexMain(@location(0) pos: vec3f, @location(1) col: vec3f, @location(2) texCoords: vec2f, @location(3) normal: vec3f, @location(4) Ka: vec3f, @location(5) Ks: vec3f, @location(6) shiny: f32) -> VertexOutput
+						fn vertexMain(@builtin(vertex_index) index: u32, @location(0) pos: vec3f, @location(1) col: vec3f, @location(2) texCoords: vec2f, @location(3) normal: vec3f, @location(4) Ka: vec3f, @location(5) Ks: vec3f, @location(6) shiny: f32) -> VertexOutput
 						{
 							var vOutput: VertexOutput;
 							let worldPos4: vec4<f32> = uni.matrix * vec4f(pos, 1.0);
@@ -1831,13 +1965,32 @@ NEXT:
 								vOutput.texCoords = vOutput.texCoords * 0.5 + 0.5;
 							}
 
+							if(uni.isFade == 1u)
+							{
+								var pos = array<vec2<f32>, 6>(
+									vec2<f32>(-1.0, 1.0),
+									vec2<f32>( 1.0, -1.0),
+									vec2<f32>( 1.0,  1.0),
+
+									vec2<f32>(-1.0,  1.0),
+									vec2<f32>(-1.0, -1.0),
+									vec2<f32>(1.0, -1.0),
+								);
+								vOutput.position = vec4<f32>(pos[index], 0.0, 1.0);
+							}
+
 							return vOutput;
 						}
 												
 						@fragment
 						fn fragmentMain(fsInput: VertexOutput) -> @location(0) vec4f
-						{
+						{						
 							//get the early returns out of the way first for better performance				
+							if(uni.isFade == 1u)
+							{
+								return vec4f(0,0,0,uni.fadeVal);								
+							}
+
 							if(uni.isFire == 1u)
 							{
 								var v = -1.0 + 2.0 * fsInput.texCoords.xy / 1.0;
@@ -2031,12 +2184,12 @@ NEXT:
 					});
 					this.dummyUniformBuffer = GPU.device.createBuffer({
 						label: 'dummyUniform',
-						size: 112,
+						size: 240,
 						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 					});										
 					this.uniformBuffer = GPU.device.createBuffer({
 						label: 'dummyUniform',
-						size: 192,
+						size: 240,
 						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 					});
 					//linear vs point sample distance for textures
@@ -2098,7 +2251,7 @@ NEXT:
 								shaderLocation:6,
 							},
 						],
-					};
+					};					
 								
 					this.mainGroupLayout = this.device.createBindGroupLayout
 					({
@@ -2116,7 +2269,7 @@ NEXT:
 								buffer: { type: 'uniform', }
 							},							
 						],
-					});
+					});					
 
 					this.cameraGroupLayout = this.device.createBindGroupLayout
 					({
@@ -2158,7 +2311,7 @@ NEXT:
 					({
 						label: 'mainPipelineLayout',
 						bindGroupLayouts: [ this.mainGroupLayout, this.cameraGroupLayout, this.textureGroupLayout ]
-					});										
+					});					
 
 					//PIPELINE VARS					
 					
@@ -2190,7 +2343,7 @@ NEXT:
 									  operation: "add",
 									},
 								},
-								writeMask: GPUColorWrite.ALL,
+								//writeMask: GPUColorWrite.ALL,
 								}]
 						},
 						primitive:
@@ -2206,7 +2359,7 @@ NEXT:
 							depthCompare: "less-equal",
 						},						
 					});
-					console.log("Created pipeline");
+					console.log("Created pipeline");					
 										
 					this.depthTexture = this.device.createTexture({
 						label: 'depthTexture',

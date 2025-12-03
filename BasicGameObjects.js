@@ -90,12 +90,12 @@ class GameObject
 		this.prefab;
 		this.transform = new Transform();		
 
-		this.uniformBufferSize = 240;
+		this.uniformBufferSize = 280;
 		this.uniformBuffer = GPU.device.createBuffer({
 			label: 'uniformBuffer',
 			size: this.uniformBufferSize,
 			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-		});
+		});			
 
 		//initialize resolution
 		GPU.device.queue.writeBuffer(this.uniformBuffer, 228, new Float32Array([(window.innerHeight/window.innerWidth)]));
@@ -119,7 +119,7 @@ class GameObject
 
 	IndexDraw(commandPass)
 	{
-		commandPass.setBindGroup(0, this.mainBindGroup);					
+		commandPass.setBindGroup(0, this.mainBindGroup);		
 		commandPass.setBindGroup(2, this.textureBindGroup);									
 
 		GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
@@ -517,14 +517,18 @@ class GameObject
 			this.grounded = true;
 			
 			//get xz distance from center as formula "x"
-			var levelCraterPos = [ this.craterPos[0], this.craterPos[1], this.craterPos[2] ];			
+			var levelCraterPos = [ this.closestCraterPos[0], this.closestCraterPos[1], this.closestCraterPos[2] ];	
 			levelCraterPos[1] = this.pos[1];			
-			var xzDistToCrater = this.VectorDistance(this.pos, levelCraterPos);			
-			adjustedY[1] = this.craterPos[1] - math.sqrt(64 - xzDistToCrater**2);			
-			adjustedY[1] += 3*this.camRadius;			
-			
-			this.localPos = [ adjustedY[0], adjustedY[1], adjustedY[2] ];			
-			//KEEP IN MIND THIS MEANS YOU NEVER COLLIDE WITH OTHER OBJECTS WHILE IN THE CRATER			
+			var xzDistToCrater = this.VectorDistance(this.pos, levelCraterPos);					
+			//prevent sqrt from being invalid	
+			xzDistToCrater = math.min(xzDistToCrater, 8);
+			console.log("xzDist after max: " + xzDistToCrater);
+
+			adjustedY[1] = this.closestCraterPos[1] - math.sqrt(64 - xzDistToCrater**2);			
+			adjustedY[1] += 1*this.sideLength;			
+						
+			this.localPos = [ adjustedY[0], adjustedY[1], adjustedY[2] ];
+			//KEEP IN MIND THIS MEANS YOU NEVER COLLIDE WITH OTHER OBJECTS WHILE IN THE CRATER
 			return;
 		}
 		//if not standing on crater (dist under crater), need to prevent camera from colliding with ground when exiting crater, how?
@@ -570,8 +574,8 @@ class GameObject
 			//check each dimension separately to allow sliding on certain dimension
 			if(clearX)			
 				this.localPos[0] = newX[0];			
-			if(clearY)							
-				this.localPos[1] = newY[1];							
+			if(clearY)			
+				this.localPos[1] = newY[1];														
 			if(clearZ)
 				this.localPos[2] = newZ[2];			
 		}
