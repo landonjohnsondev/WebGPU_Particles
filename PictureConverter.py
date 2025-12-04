@@ -1,7 +1,7 @@
 from PIL import Image
 import numpy as np
 
-img = Image.open("GrassNormals2.png").convert("RGBA")
+img = Image.open("creeper.png").convert("RGBA")
 
 data = np.array(img, dtype=np.uint8)
 

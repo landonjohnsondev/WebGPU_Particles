@@ -1,6 +1,6 @@
 <!--
 NEXT:
-• Multiple crater collision
+• Improve performance
 • New particles
 • Game stuff
 -->
@@ -18,12 +18,19 @@ NEXT:
 			<canvas id="myCanvas" style="display: block; width: 100%; height: 100%;" width="1500" height="750"></canvas>
 			<h1 id="title">Explosive Maneuvers</h1>
 			
-			<button id="start" style="top: 40%;" onclick=GPU.StartGame()>
-				<h1>Start Game</h1>
+			<button id="start" style="top: 40%;" onclick="GPU.HideTitleScreen(); GPU.StartGame()">
+				<h1 id="startText">Start Game</h1>
 			</button>
 
-			<button id="credits" style="top: 50%;">
-				<h1>Credits</h1>
+			<button id="credits" style="top: 50%;" onclick="GPU.HideTitleScreen(); GPU.ShowCredits()">
+				<h1 id="creditsText">Credits</h1>
+			</button>
+
+			<h1 id="Landon" class="centerText" style="top: 50%;">Landon Johnson</h1>
+			<h1 id="Jase" class="centerText" style="top: 40%;">Jase Rodriguez</h1>
+
+			<button id="back" style="right: 75%; top: 75%;" onclick="GPU.HideCredits(); GPU.ShowTitleScreen()">
+				<h1>Back</h1>
 			</button>
 
 			<audio id="boom" src="Audio/VineBoom.mp3"></audio>
@@ -40,18 +47,33 @@ NEXT:
 		<!-- All classes, and WebGPU will be defined (or imported) here -->
 		 <!-- WRITE MAT4 MATRICES DIRECTLY INTO BUFFER, DON'T REORDER -->
 		<SCRIPT>						
-
+			var secondTimer = 0.0;
+			var lastSecondTime;
+			var performancePercentage = 1.0;
+		
 			function FrameUpdate()
 			{				
 				GPU.GetControllerInput();
 				GPU.UpdateAll();
 				GPU.RenderAll(GPU.resolution);
-				averageTime = (performance.now() - GPU.startTime) / GPU.loops;
-				GPU.loops++;
-				// console.log("average loop time: " + averageTime + "ms");
-				// console.log("percentage of full speed: " + ((averageTime*60)/1000));
+							
+				GPU.loopsInLastSecond++;
+								
+				//for initialization
+				if(lastSecondTime == undefined)
+					lastSecondTime = performance.now();
+				
+				var timePassed = (performance.now() - lastSecondTime) / 1000;				
+				if(timePassed > 1)
+				{
+					lastSecondTime = performance.now();
+					performancePercentage = GPU.loopsInLastSecond / 60.0;
+					GPU.loopsInLastSecond = 0;
+					//console.log("performancePercentage in frameUpdate: " + performancePercentage);
+				}
+							
 				requestAnimationFrame(FrameUpdate);
-			}			
+			}
 
 			//making this a global function so it can be called after all objects have been made
 			function InitExplodePositions(dummyPos)
@@ -525,17 +547,13 @@ NEXT:
 					let closestIdx = -1;
 					for(let i = 0; i < GPU.explodePos.length; i++)
 					{
-						var dist = this.VectorDistance(this.pos, GPU.explodePos[i]);
-						console.log("dist to explodePos[" + i + "]: " + dist);
-						console.log("this.pos: " + this.pos);
-						console.log("explodePos[" + i + "]: " + GPU.explodePos[i]);
+						var dist = this.VectorDistance(this.pos, GPU.explodePos[i]);						
 						if(dist < minDist)
 						{
 							minDist = dist;
 							closestIdx = i;
 						}
-					}					
-					//console.log("return explodePos[" + closestIdx + "]: " + GPU.explodePos[closestIdx]);
+					}										
 					return [ GPU.explodePos[closestIdx][0], GPU.explodePos[closestIdx][1], GPU.explodePos[closestIdx][2] ];
 				}
 
@@ -564,16 +582,17 @@ NEXT:
 					this.fade = fade;
 
 					let maxDim = 1;
-					let maxUV = 2;
-					//these triangles form a square, which is the area for the fire "texture"				
+					let maxU = 0.5;
+					let maxV = 1;
+					//these triangles form a square, which is the area for the fire "texture"		
 					this.vertices = new Float32Array([
-						 -maxDim,maxDim,0, 0,0,0, -maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
-						-maxDim,-maxDim,0, 0,0,0, -maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
-						  maxDim,maxDim,0, 0,0,0,  maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
+						 -maxDim,maxDim,0, 0,0,0, -maxU, maxV, 0,0,0,0,0,0,0,0,0,0,
+						-maxDim,-maxDim,0, 0,0,0, -maxU,-maxV, 0,0,0,0,0,0,0,0,0,0,
+						  maxDim,maxDim,0, 0,0,0,  maxU, maxV, 0,0,0,0,0,0,0,0,0,0,
 						 
-						-maxDim,-maxDim,0, 0,0,0,  maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
-						 maxDim,-maxDim,0, 0,0,0, -maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
-						  maxDim,maxDim,0, 0,0,0, -maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
+						-maxDim,-maxDim,0, 0,0,0,  maxU,-maxV, 0,0,0,0,0,0,0,0,0,0,
+						 maxDim,-maxDim,0, 0,0,0, -maxU,-maxV, 0,0,0,0,0,0,0,0,0,0,
+						  maxDim,maxDim,0, 0,0,0, -maxU, maxV, 0,0,0,0,0,0,0,0,0,0,
 					]);
 					
 					this.vertexBuffer = GPU.device.createBuffer({
@@ -652,7 +671,7 @@ NEXT:
 											
 				Render(commandPass)
 				{					
-					this.ParticleDraw(commandPass);				
+					this.ParticleDraw(commandPass);		
 				}
 			}
 			
@@ -717,7 +736,7 @@ NEXT:
 					//set isFire to true in the shader
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 124, new Uint32Array([1]));			
 
-					this.smoke = GPU.CreateObject(2, Smoke, [0,1.3,0], [0,0,0], [0.8, 0.8, 0.8], 0, 0, 0, 0);
+					this.smoke = GPU.CreateObject(2, Smoke, [0,1,0], [0,0,0], [0.8, 0.8, 0.8], 0, 0, 0, 0);
 					this.smoke.SetParent(this);
 				}																				
 
@@ -793,6 +812,109 @@ NEXT:
 				Render(commandPass)
 				{
 					this.ParticleDraw(commandPass);
+				}
+			}
+
+			class Fog extends GameObject
+			{
+				constructor(pos, rot, scale)
+				{
+					super(pos, rot, scale);	
+										
+					//these triangles form a square, which is the area for the fire "texture"
+					let maxDim = 0.5;
+					let maxUV = 1;
+					this.vertices = new Float32Array([
+						 -maxDim,maxDim,0, 0,0,0, -maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
+						-maxDim,-maxDim,0, 0,0,0, -maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
+						  maxDim,maxDim,0, 0,0,0,  maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
+						 
+						-maxDim,-maxDim,0, 0,0,0,  maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
+						 maxDim,-maxDim,0, 0,0,0, -maxUV,-maxUV, 0,0,0,0,0,0,0,0,0,0,
+						  maxDim,maxDim,0, 0,0,0, -maxUV, maxUV, 0,0,0,0,0,0,0,0,0,0,
+					]);
+					
+					this.vertexBuffer = GPU.device.createBuffer({
+						label: "verticeBuffer",
+						size: this.vertices.byteLength,
+						usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+					});
+					GPU.device.queue.writeBuffer(this.vertexBuffer, 0, this.vertices);
+
+					let randStartTime = math.random()*100;
+					this.timer = randStartTime;
+					
+					this.billboardGroup = GPU.device.createBindGroup
+					({
+						layout: GPU.pipeline.getBindGroupLayout(0),
+						label: "flameGroup",
+						entries:
+						[
+							{ binding: 0, resource: {buffer: this.uniformBuffer}},
+							{ binding: 1, resource: {buffer: GPU.lightBuffer}},
+						],
+					});					
+					
+					//even though fire doesn't use texture bindings, the group needs to be bound since
+					//group(0) interacts with the textures in group(2) in the shader
+					this.SetupTextures(undefined, undefined);
+					this.textureBindGroup = GPU.device.createBindGroup
+					({
+						layout: GPU.pipeline.getBindGroupLayout(2),
+						label: 'customObjTextureGroup',
+						entries:
+						[																
+							{ binding: 0, resource: this.textureObj.createView() },			
+							{ binding: 1, resource: GPU.sampler },
+							{ binding: 2, resource: this.normalTextureObj.createView() },
+						],
+					});
+
+					//set isFog to true in the shader
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 244, new Uint32Array([1]));					
+				}
+				
+				Update()
+				{
+
+				}
+
+				Render(commandPass)
+				{
+					commandPass.setBindGroup(0, this.billboardGroup);
+					commandPass.setBindGroup(2, this.textureBindGroup);		
+					
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
+						this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
+						this.worldMatrix[0][1],this.worldMatrix[1][1],this.worldMatrix[2][1],this.worldMatrix[3][1],
+						this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
+						this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
+					]));				
+											
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));					
+					
+					commandPass.setVertexBuffer(0, this.vertexBuffer);
+					commandPass.draw(6,1,0,0);
+				}
+			}
+
+			class Boss extends CustomObj
+			{
+				constructor(parserData, rawTexture, normalMap, pos, rot, scale)
+				{
+					super(parserData, rawTexture, normalMap, pos, rot, scale);
+					console.log("creeper rawTexture: " + rawTexture);
+					console.log("creeper textureObj: " + this.textureObj);
+				}
+
+				Update()
+				{
+
+				}
+
+				Render(commandPass)
+				{
+					this.IndexDraw(commandPass);
 				}
 			}
 
@@ -1050,7 +1172,7 @@ NEXT:
 							var smoke1 = GPU.CreateObject(
 								2, 
 								Smoke, 
-								[this.pos[0], this.pos[1]+8, this.pos[2]],
+								[this.pos[0], this.pos[1]+5, this.pos[2]],
 								[0,0,0],
 								[10, 10, 10], 
 								0, 0, 0, 1);
@@ -1196,14 +1318,6 @@ NEXT:
 
 				Update()
 				{
-					//nothing for now
-				}
-
-				Render(commandPass)
-				{
-					commandPass.setBindGroup(0, this.mainBindGroup);		
-					commandPass.setBindGroup(2, this.textureBindGroup);
-					
 					if(this.fadeState == "fadeOut")
 						this.fadeOpacity = math.min(this.fadeOpacity + (1/60), 1);
 					else if(this.fadeState == "fadeIn")
@@ -1223,6 +1337,12 @@ NEXT:
 					}
 					// console.log("fadeState: " + this.fadeState);
 					// console.log("fadeOpacity: " + this.fadeOpacity);
+				}
+
+				Render(commandPass)
+				{
+					commandPass.setBindGroup(0, this.mainBindGroup);		
+					commandPass.setBindGroup(2, this.textureBindGroup);															
 
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 232, new Float32Array([this.fadeOpacity]));
 
@@ -1272,14 +1392,15 @@ NEXT:
 						await this.SetupGPU();
 						
 
-						this.camera = this.CreateObject(0, Camera, [4,-1,-5], [0,0,0]);						
-						//comment this out to show title screen
-						//remove comment to skip title screen
-						//this.StartGame();						
+						this.camera = this.CreateObject(0, Camera, [4,-1,-5], [0,0,0]);												
 
 						requestAnimationFrame(FrameUpdate);
 						//basically a fade manager
 						var fade = this.CreateObject(0, Fade, [0,0,0], [0,0,0]);
+
+						//comment this out to show title screen
+						//remove comment to skip title screen
+						this.StartGame();
 					})();
 										
 				}
@@ -1287,35 +1408,58 @@ NEXT:
 				StartGame()
 				{
 					console.log("starting game...");
-					this.HideMenu();					
+					this.HideTitleScreen();					
 					GPU.GetObjectOfType(Fade).fadeState = "fadeOut";
-					GPU.GetObjectOfType(Fade).isFirstFade = true;
-					//this.SlowStart();
+					GPU.GetObjectOfType(Fade).isFirstFade = true;					
 					console.log("game started");
 				}
 
-				ShowMenu()
+				ShowCredits()
 				{
-					//this also makes the menu not interactable
-					document.getElementById("title").style.visibility = "visible";
-					document.getElementById("start").style.visibility = "visible";
-					document.getElementById("credits").style.visibility = "visible";	
+					document.getElementById("Landon").style.visibility = "visible";
+					document.getElementById("Jase").style.visibility = "visible";
+					document.getElementById("back").style.visibility = "visible";
 				}
 
-				HideMenu()
+				HideCredits()
+				{					
+					document.getElementById("Landon").style.visibility = "hidden";
+					document.getElementById("Jase").style.visibility = "hidden";
+					document.getElementById("back").style.visibility = "hidden";
+				}
+
+				ShowTitleScreen()
+				{
+					//this also makes the menu not interactable
+					document.getElementById("title").style.visibility = "visible";	
+
+					document.getElementById("startText").style.visibility = "visible";
+					document.getElementById("start").style.visibility = "visible";
+
+					document.getElementById("credits").style.visibility = "visible";
+					document.getElementById("creditsText").style.visibility = "visible";
+				}
+
+				HideTitleScreen()
 				{
 					document.getElementById("title").style.visibility = "hidden";
+					
 					document.getElementById("start").style.visibility = "hidden";
-					document.getElementById("credits").style.visibility = "hidden";					
+					document.getElementById("startText").style.visibility = "hidden";
+
+					document.getElementById("credits").style.visibility = "hidden";						
+					document.getElementById("creditsText").style.visibility = "hidden";	
 				}
 
 				async SlowStart()
 				{					
 					//you can specify less parameters than the function defines and JS will still run it
+					//var camera = this.CreateObject(0, Camera, [4,-1,-5], [0,0,0]);													
+					//var fog = this.CreateObject(0, Fog, [0, 0, 0], [0,0,0]);
 
-					//var camera = this.CreateObject(0, Camera, [4,-1,-5], [0,0,0]);			
-					this.camera.pos = [4,-1,-5];
-					console.log("set cam pos");
+					// var result = ParseVertices(window.creeper, window.creeperMtl);
+					// console.log("window.creeperTexture: " + window.creeperTexture);
+					// var creeper = this.CreateObject(1, Boss, [3, 0, 0], [0,0,0], [1,1,1], result, window.creeperTexture);
 
 					var pointLight;
 					for(let i = 0; i < 5; i++)
@@ -1397,7 +1541,7 @@ NEXT:
 					InitCollision();
 
 					this.startTime = performance.now();
-					this.loops = 0;
+					this.loopsInLastSecond = 0;
 					//requestAnimationFrame(FrameUpdate);
 				}		
 
@@ -1506,8 +1650,8 @@ NEXT:
 					}
 					for(var i in this.Solid)
 						this.Solid[i].Render(this.mainPass);
-					for(var i in this.Trigger)					
-						this.Trigger[i].Render(this.mainPass);								
+					for(var i in this.Trigger)																
+							this.Trigger[i].Render(this.mainPass);					
 					this.CheckResolution(resolution);	
 					
 					//render fade last so transparency works
@@ -1517,9 +1661,48 @@ NEXT:
 							this.Visual[i].Render(this.mainPass);
 					}
 
+					// var smokes = this.GetSmokesByDepth();
+					// for(let i = 0; i < smokes.length; i++)
+					// {
+					// 	console.log("rendering smoke at distance: " + this.GetObjectOfType(Camera).VectorDistance(this.GetObjectOfType(Camera).pos, smokes[i].pos));
+					// 	smokes[i].Render(this.mainPass);
+					// }
+
 					this.mainPass.end();
 					this.mainCommandBuffer = this.encoder.finish();
 					this.device.queue.submit([this.mainCommandBuffer]);
+				}
+
+				GetSmokesByDepth()
+				{
+					var smokes = [];
+					for(var i in this.Trigger)
+					{
+						if(this.Trigger[i] instanceof Smoke)
+							smokes.push(this.Trigger[i]);		
+					}
+
+					var camera = GPU.GetObjectOfType(Camera);
+
+					for(let i = 0; i < smokes.length; i++)
+					{
+						for(let j = 0; j < smokes.length; j++)
+						{
+							if(camera.VectorDistance(camera.pos, smokes[i].pos) > camera.VectorDistance(camera.pos, smokes[j].pos))
+							{
+								var temp = smokes[i];
+								smokes[i] = smokes[j];
+								smokes[j] = temp;
+							}
+						}
+					}
+
+					console.log("sorted smokes");
+					for(let i = 0; i < smokes.length; i++)
+					{
+						console.log(camera.VectorDistance(camera.pos, smokes[i].pos));
+					}
+					return smokes;
 				}
 
 				//update projection matrix in shader so the world doesn't look stretchedsda
@@ -1541,7 +1724,7 @@ NEXT:
 					//type 1 = solid
 					//type 2 = trigger										
 					var temp;
-					if(prefab == CustomObj || prefab == Tnt  || prefab == Crater)
+					if(prefab == CustomObj || prefab == Tnt  || prefab == Crater || prefab == Boss)
 						temp = new prefab(parserData, texture, normalMap, pos, rot, scale); //Yes this dark sorcery will work.
 					else if (prefab == Rope)
 						temp = new prefab(parserData, pos, rot, scale);
@@ -1685,12 +1868,14 @@ NEXT:
 							resolutionRatio: f32,
 							fadeVal: f32,
 							isFade: u32,
+							performancePercentage: f32,
+							isFog: u32,
 						};						
 						@group(0) @binding(0) var<uniform> uni: Uniforms;			
 
 						struct VertexOutput
 						{
-							@builtin(position) position: vec4f,
+							@builtin(position) position: vec4f,							
 							@location(0) color: vec3f,	
 							@location(1) texCoords: vec2f,
 							@location(2) normal: vec4f,
@@ -1905,12 +2090,15 @@ NEXT:
 						
 						fn raymarch_smoke(org : vec3<f32>, dir : vec3<f32>) -> vec4<f32>
 						{
-							let steps = 64;
-							let stepSize = 0.15;
+							let steps = 64;								
+							//use adjustedSteps for dynamic performance changing						
+							//var adjustedSteps: i32 = i32(uni.performancePercentage * f32(steps));							
+							//var adjustedSteps = steps;
+							let stepSize = 0.15; // / (uni.performancePercentage);							
 
 							var pos = org;
 							var alpha = 0.0;
-							var color = vec3<f32>(0.0);
+							var color = vec3<f32>(0.0);							
 
 							for (var i = 0; i < steps; i = i + 1)
 							{
@@ -1984,11 +2172,16 @@ NEXT:
 												
 						@fragment
 						fn fragmentMain(fsInput: VertexOutput) -> @location(0) vec4f
-						{						
+						{													
 							//get the early returns out of the way first for better performance				
 							if(uni.isFade == 1u)
 							{
 								return vec4f(0,0,0,uni.fadeVal);								
+							}
+
+							if(uni.isFog == 1u)
+							{
+								return vec4f(1);
 							}
 
 							if(uni.isFire == 1u)
@@ -2016,10 +2209,12 @@ NEXT:
 								
 							if(uni.isSmoke == 1u)
 							{
+								//return vec4f(uni.performancePercentage, 0, 0, 1);
+								
 								var v = -1.0 + 2.0 * fsInput.texCoords.xy;
 								var org = vec3<f32>(0.0, -2.0, 4.0);
 								//smoke explodes to size of screen. how to widen it a ton?
-								var dir = normalize(vec3<f32>(v.x * 1.6, -v.y, -1.6));
+								var dir = normalize(vec3<f32>(v.x * 1.6, -v.y, -1));
 
 								let sm = raymarch_smoke(org, dir);
 
@@ -2067,7 +2262,7 @@ NEXT:
 							for(var i = 0u; i < 3u; i++)
 							{							
 								// hard coded explosion radius for now, might customize later							
-								if(distance(fsInput.worldSpace, uni.explodePos[i]) < 7.92 && uni.isLaunchable == 0u && uni.isSmoke == 0u)
+								if(distance(fsInput.worldSpace, uni.explodePos[i]) < 7.92 && uni.isLaunchable == 0u && uni.isSmoke == 0u && uni.isFog == 0u)
 								{
 									discard;
 								}
@@ -2369,7 +2564,7 @@ NEXT:
 					});
 					this.depthTextureView = this.depthTexture.createView();
 
-					this.ShowMenu();
+					this.ShowTitleScreen();
 				}
 			}							
 			

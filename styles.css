@@ -11,6 +11,16 @@ button
     cursor: pointer;
 }
 
+.centerText
+{
+    position: absolute; 
+    left: 50%;     
+    transform: translateX(-50%);
+    text-align: center;
+    visibility: hidden; /*hide until canvas loads*/
+    width: 300px;        
+}
+
 #title
 {
     visibility: hidden;

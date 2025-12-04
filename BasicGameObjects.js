@@ -147,10 +147,7 @@ class GameObject
 	ParticleDraw(commandPass)
 	{
 		commandPass.setBindGroup(0, this.billboardGroup);
-		commandPass.setBindGroup(2, this.textureBindGroup);
-
-		//The reason for the timer issue is that every object uses its own uniform buffer, which sets timer to 0					
-		GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));
+		commandPass.setBindGroup(2, this.textureBindGroup);		
 		
 		GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
 			this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
@@ -158,6 +155,11 @@ class GameObject
 			this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
 			this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
 		]));				
+								
+		GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));
+
+		//write performancePercentage to shader		
+		GPU.device.queue.writeBuffer(this.uniformBuffer, 240, new Float32Array([performancePercentage]));
 		
 		commandPass.setVertexBuffer(0, this.vertexBuffer);
 		commandPass.draw(6,1,0,0);
@@ -521,8 +523,7 @@ class GameObject
 			levelCraterPos[1] = this.pos[1];			
 			var xzDistToCrater = this.VectorDistance(this.pos, levelCraterPos);					
 			//prevent sqrt from being invalid	
-			xzDistToCrater = math.min(xzDistToCrater, 8);
-			console.log("xzDist after max: " + xzDistToCrater);
+			xzDistToCrater = math.min(xzDistToCrater, 8);			
 
 			adjustedY[1] = this.closestCraterPos[1] - math.sqrt(64 - xzDistToCrater**2);			
 			adjustedY[1] += 1*this.sideLength;			
