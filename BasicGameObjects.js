@@ -59,10 +59,15 @@ class GameObject
 		this.localRot = [rot[0],rot[1],rot[2]];
 
 		if(scale == undefined)
-			scale = [1,1,1];
-		
-		this.scale = [1,1,1];
-		this.localScale = [scale[0],scale[1],scale[2]];
+		{
+			this.scale = [1,1,1];
+			this.localScale = [1,1,1];
+		}
+		else
+		{
+			this.scale = [ scale[0], scale[1], scale[2] ];				
+			this.localScale = [ scale[0],scale[1],scale[2] ];
+		}
 
 		this.localWorldMatrix = [
 									[1,0,0,0],
@@ -90,7 +95,7 @@ class GameObject
 		this.prefab;
 		this.transform = new Transform();		
 
-		this.uniformBufferSize = 280;
+		this.uniformBufferSize = 290;
 		this.uniformBuffer = GPU.device.createBuffer({
 			label: 'uniformBuffer',
 			size: this.uniformBufferSize,
@@ -98,7 +103,7 @@ class GameObject
 		});			
 
 		//initialize resolution
-		GPU.device.queue.writeBuffer(this.uniformBuffer, 228, new Float32Array([(window.innerHeight/window.innerWidth)]));
+		GPU.device.queue.writeBuffer(this.uniformBuffer, 168, new Float32Array([(window.innerHeight/window.innerWidth)]));
 	}
 
 	GetCollisionRadius()
@@ -118,9 +123,9 @@ class GameObject
 	}
 
 	IndexDraw(commandPass)
-	{
-		commandPass.setBindGroup(0, this.mainBindGroup);		
-		commandPass.setBindGroup(2, this.textureBindGroup);									
+	{				
+		commandPass.setBindGroup(0, this.mainBindGroup);
+		commandPass.setBindGroup(2, this.textureBindGroup);		
 
 		GPU.device.queue.writeBuffer(this.uniformBuffer, 0, new Float32Array([
 			this.worldMatrix[0][0],this.worldMatrix[1][0],this.worldMatrix[2][0],this.worldMatrix[3][0],
@@ -131,9 +136,7 @@ class GameObject
 		GPU.device.queue.writeBuffer(this.uniformBuffer, 64, new Float32Array(this.rot));
 
 		if(this.timer != undefined)
-			GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));
-
-		GPU.device.queue.writeBuffer(this.uniformBuffer, 228, new Float32Array([0.5]));
+			GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));		
 		
 		GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array(this.Ka));
 		GPU.device.queue.writeBuffer(this.uniformBuffer, 96, new Float32Array(this.Ks));						
@@ -155,14 +158,63 @@ class GameObject
 			this.worldMatrix[0][2],this.worldMatrix[1][2],this.worldMatrix[2][2],this.worldMatrix[3][2],
 			this.worldMatrix[0][3],this.worldMatrix[1][3],this.worldMatrix[2][3],this.worldMatrix[3][3],
 		]));				
-								
+										
 		GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));
 
 		//write performancePercentage to shader		
-		GPU.device.queue.writeBuffer(this.uniformBuffer, 240, new Float32Array([performancePercentage]));
+		//GPU.device.queue.writeBuffer(this.uniformBuffer, 180, new Float32Array([performancePercentage]));
 		
 		commandPass.setVertexBuffer(0, this.vertexBuffer);
-		commandPass.draw(6,1,0,0);
+		var numVertices = this.vertices.length / GPU.vertexStride;
+		commandPass.draw(numVertices,1,0,0);
+	}
+
+	BottomY()
+	{
+		if(this.bottomY == undefined)
+			return undefined;
+
+		return this.pos[1] + this.bottomY;
+	}
+
+	TopY()
+	{
+		if(this.topY == undefined)
+			return undefined;
+
+		return this.pos[1] + this.topY;
+	}
+
+	LeftX()
+	{
+		if(this.leftX == undefined)
+			return undefined;
+
+		return this.pos[0] + this.leftX;
+	}
+
+	RightX()
+	{
+		if(this.rightX == undefined)
+			return undefined;
+
+		return this.pos[0] + this.rightX;
+	}
+
+	FarZ()
+	{
+		if(this.farZ == undefined)
+			return undefined;
+
+		return this.pos[2] + this.farZ;
+	}
+
+	NearZ()
+	{
+		if(this.nearZ == undefined)
+			return undefined;
+
+		return this.pos[2] + this.nearZ;
 	}
 
 	Normalize(vector)
@@ -192,6 +244,15 @@ class GameObject
 		let dist = 0.0;
 		dist += math.pow(vector1[0] - vector2[0], 2);
 		dist += math.pow(vector1[1] - vector2[1], 2);	
+		dist += math.pow(vector1[2] - vector2[2], 2);
+		dist = math.sqrt(dist);
+		return dist;
+	}
+
+	XZDistance(vector1, vector2)
+	{	
+		let dist = 0.0;
+		dist += math.pow(vector1[0] - vector2[0], 2);		
 		dist += math.pow(vector1[2] - vector2[2], 2);
 		dist = math.sqrt(dist);
 		return dist;
@@ -361,9 +422,6 @@ class GameObject
 
 	CheckCollision(obj1, pos1, obj2, pos2)
 	{
-		// if(obj1.id == "ID0" || obj2.id == "ID0")
-		// 	console.log("checking collision with cam");
-
 		//adjust collision boundaries to be in world space
 
 		//for collision at any angle, get the camera's vertices, then vertice pair for each edge
@@ -389,22 +447,7 @@ class GameObject
 		var obj2BottomY = obj2.bottomY + pos2[1];
 
 		var obj2FarZ = obj2.farZ + pos2[2];
-		var obj2NearZ = obj2.nearZ + pos2[2];
-
-		// if(obj2.id == "ID11")
-		// {
-		// 	console.log("camLeftX: " + obj1LeftX + ", camRightX: " + obj1RightX);
-		// 	console.log("camTopY: " + obj1TopY + ", camBottomY: " + obj1BottomY);
-		// 	console.log("camNearZ: " + obj1NearZ + ", camFarZ: " + obj1FarZ);
-
-		// 	console.log("");
-
-		// 	console.log("obj2LeftX: " + obj2LeftX + ", obj2RightX: " + obj2RightX);
-		// 	console.log("obj2TopY: " + obj2TopY + ", obj2BottomY: " + obj2BottomY);
-		// 	console.log("obj2NearZ: " + obj2NearZ + ", obj2FarZ: " + obj2FarZ);
-
-		// 	console.log("");
-		// }
+		var obj2NearZ = obj2.nearZ + pos2[2];	
 
 		let xOverlap = (obj1LeftX < obj2RightX && obj1RightX > obj2LeftX);
 		let yOverlap = (obj1BottomY < obj2TopY && obj1TopY > obj2BottomY);
@@ -415,7 +458,7 @@ class GameObject
 		return false;
 	}
 				
-	//move stops an object immediately when it hits something
+	//stops an object immediately when it hits something
 	Move()
 	{
 		var newX = [0,0,0];
@@ -431,7 +474,9 @@ class GameObject
 
 		newX[0] += this.vel[0];		
 		newY[1] += this.vel[1];
-		newZ[2] += this.vel[2];		
+		newZ[2] += this.vel[2];
+
+		var objectHit = undefined;
 
 		//means this is a Solid, but it is always true for all objects currently
 		if(!this.isTrigger)
@@ -439,6 +484,31 @@ class GameObject
 			var clearX = true;			
 			var clearY = true;
 			var clearZ = true;
+
+
+			if(!(this instanceof Camera))
+			{
+				if(this.CheckCollision(this, newX, GPU.camera, GPU.camera.pos))
+				{
+					objectHit = GPU.camera;					
+					clearX = false;
+					clearZ = false;
+				}
+
+				if(this.CheckCollision(this, newY, GPU.camera, GPU.camera.pos))
+				{
+					objectHit = GPU.camera;								
+					clearY = false;
+				}
+
+				if(this.CheckCollision(this, newZ, GPU.camera, GPU.camera.pos))
+				{
+					objectHit = GPU.camera;
+					clearX = false;
+					clearZ = false;
+				}
+			}
+
 			for(var so in GPU.Solid)
 			{
 				if(GPU.Solid[so] == this)
@@ -446,21 +516,30 @@ class GameObject
 				
 				if(this.CheckCollision(this, newX, GPU.Solid[so], GPU.Solid[so].pos))
 				{					
+					objectHit = GPU.Solid[so];
+
 					clearX = false;					
 					clearZ = false;
+					GPU.Solid[so].OnObjectStay(this);					
 				}
 
 				if(this.CheckCollision(this, newZ, GPU.Solid[so], GPU.Solid[so].pos))
 				{
+					objectHit = GPU.Solid[so];
+
 					clearZ = false;					
 					clearX = false;
+					GPU.Solid[so].OnObjectStay(this);
 				}
 
 				if(this.CheckCollision(this, newY, GPU.Solid[so], GPU.Solid[so].pos))
 				{
+					objectHit = GPU.Solid[so];
+
 					clearY = false;
 					this.grounded = true;
 					this.vel[1] = 0;
+					GPU.Solid[so].OnObjectStay(this);
 				}
 			}
 						
@@ -483,9 +562,23 @@ class GameObject
 					continue;
 
 				if(this.CheckCollision(this, newXZ, GPU.Trigger[tr], GPU.Trigger[tr].pos))
-					console.log("TRIGGER ENTERED");				
+					console.log("TRIGGER ENTERED");	
 			}
 		}
+
+		return objectHit;
+	}
+
+	InitExplodePositions()
+	{					
+		let initialOffset = GPU.explodePosInitialOffset;		
+		for(let i = 0; i < GPU.numExplodePositions; i++)
+		{			
+			if(GPU.explodePos[i] != undefined)										
+				GPU.device.queue.writeBuffer(this.uniformBuffer, initialOffset + (16 * i), new Float32Array(GPU.explodePos[i]));						
+			else														
+				GPU.device.queue.writeBuffer(this.uniformBuffer, initialOffset + (16 * i), new Float32Array([9999,9999,9999, 1]));			
+		}			
 	}
 
 	Between(num, low, high)
@@ -507,10 +600,10 @@ class GameObject
 			newX[i] = this.pos[i];
 			newY[i] = this.pos[i];
 			newZ[i] = this.pos[i];
-		}
+		}		
 		
 		// console.log("standingOnCrater: " + standingOnCrater);
-		// console.log("ignoreCollision: " + ignoreCollison);
+		// console.log("ignoreCollision: " + ignoreCollison);		
 
 		if(standingOnCrater && this.vel[1] < 0)
 		{			
@@ -528,6 +621,7 @@ class GameObject
 			adjustedY[1] = this.closestCraterPos[1] - math.sqrt(64 - xzDistToCrater**2);			
 			adjustedY[1] += 1*this.sideLength;			
 						
+			console.log("setting cam crater pos");
 			this.localPos = [ adjustedY[0], adjustedY[1], adjustedY[2] ];
 			//KEEP IN MIND THIS MEANS YOU NEVER COLLIDE WITH OTHER OBJECTS WHILE IN THE CRATER
 			return;
@@ -544,8 +638,11 @@ class GameObject
 			this.localPos[0] += this.vel[0];
 			this.localPos[1] += this.vel[1];
 			this.localPos[2] += this.vel[2];
-			return;
-		}
+			//no collided object
+			return undefined;
+		}		
+
+		var objHit = false;		
 
 		//means this is a Solid, but it is always true for all objects currently
 		if(!this.isTrigger)
@@ -556,16 +653,37 @@ class GameObject
 			for(var so in GPU.Solid)
 			{
 				if(GPU.Solid[so] == this)
+					continue;		
+
+				//ground
+				if(GPU.Solid[so].id == "ID23")
+				{
+					//console.log("ground topY: " + (GPU.Solid[so].pos[1] + GPU.Solid[so].topY));
+				}
+
+				//allows jumping while in crater
+				if((GPU.Solid[so] instanceof Grass) && standingOnCrater)									
 					continue;				
 				
 				if(this.CheckCollision(this, newX, GPU.Solid[so], GPU.Solid[so].pos))
+				{
+					objHit = GPU.Solid[so];
+					GPU.Solid[so].OnObjectStay(this);
 					clearX = false;
+				}
 
 				if(this.CheckCollision(this, newZ, GPU.Solid[so], GPU.Solid[so].pos))				
-					clearZ = false;				
+				{
+					objHit = GPU.Solid[so];
+					GPU.Solid[so].OnObjectStay(this);
+					clearZ = false;
+				}
 
 				if(this.CheckCollision(this, newY, GPU.Solid[so], GPU.Solid[so].pos))
 				{
+					objHit = GPU.Solid[so];				
+					GPU.Solid[so].OnObjectStay(this);					
+
 					clearY = false;
 					this.grounded = true;
 					this.vel[1] = 0;
@@ -580,20 +698,22 @@ class GameObject
 			if(clearZ)
 				this.localPos[2] = newZ[2];			
 		}
-		//object moving is a trigger
-		else
-		{
-			this.pos = newXZ;
-			for(var tr in GPU.Trigger)
-			{
-				if(GPU.Trigger[tr] == this)
-					continue;
 
-				if(this.CheckCollision(this, newXZ, GPU.Trigger[tr], GPU.Trigger[tr].pos))
-					console.log("TRIGGER ENTERED");				
-			}
-		}
-	}	
+		for(var tr in GPU.Trigger)
+		{
+			if(GPU.Trigger[tr] == this)
+				continue;
+
+			if(this.CheckCollision(this, this.localPos, GPU.Trigger[tr], GPU.Trigger[tr].pos))			
+				GPU.Trigger[tr].OnObjectStay(this);	
+		}		
+		return objHit;
+	}
+
+	OnObjectStay(obj)
+	{
+		//basically OnCollisionStay from Unity, you can override this for each class
+	}
 
 	ApplySceneGraph()
 	{
@@ -603,7 +723,7 @@ class GameObject
 
 		if(this.parent != null)
 		{
-			this.worldMatrix = math.multiply(this.parent.worldMatrix, this.localWorldMatrix);				
+			this.worldMatrix = math.multiply(this.parent.worldMatrix, this.localWorldMatrix);
 		}
 		else		
 		{
@@ -636,7 +756,7 @@ class GameObject
 		else
 		{
 			rawTexture = new Uint8Array([255, 0, 0, 255]);
-		}
+		}		
 
 		this.textureObj = GPU.device.createTexture({
 			size: [textureWidth, textureWidth],
@@ -793,9 +913,11 @@ class Light extends GameObject
 			],
 		});
 
-		GPU.numLights++;
-		if(GPU.numLights == 1)
+		//account for itself with + 1
+		var numLights = GPU.GetObjectsOfType(Light).length + 1;
+		if(numLights == 1)
 		{
+			console.log("initialize light stuff");
 			//for ComplexLightSystem
 			GPU.device.queue.writeBuffer(GPU.lightBuffer, 0, new Float32Array([this.ambientLight]));
 			GPU.device.queue.writeBuffer(GPU.lightBuffer, 4, new Float32Array([this.specularity]));
