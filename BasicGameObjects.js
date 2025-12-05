@@ -620,8 +620,7 @@ class GameObject
 
 			adjustedY[1] = this.closestCraterPos[1] - math.sqrt(64 - xzDistToCrater**2);			
 			adjustedY[1] += 1*this.sideLength;			
-						
-			console.log("setting cam crater pos");
+									
 			this.localPos = [ adjustedY[0], adjustedY[1], adjustedY[2] ];
 			//KEEP IN MIND THIS MEANS YOU NEVER COLLIDE WITH OTHER OBJECTS WHILE IN THE CRATER
 			return;
@@ -642,7 +641,7 @@ class GameObject
 			return undefined;
 		}		
 
-		var objHit = false;		
+		var objHit = undefined;		
 
 		//means this is a Solid, but it is always true for all objects currently
 		if(!this.isTrigger)
@@ -696,7 +695,7 @@ class GameObject
 			if(clearY)			
 				this.localPos[1] = newY[1];														
 			if(clearZ)
-				this.localPos[2] = newZ[2];			
+				this.localPos[2] = newZ[2];
 		}
 
 		for(var tr in GPU.Trigger)

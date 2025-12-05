@@ -1,10 +1,10 @@
 <!--
 NEXT:
-• Correct explode launch
 • Spike side attack
-• Move with grass blocks
 • Creeper metal sequence
-• Game stuff
+• Move with grass blocks
+• Proceed to win screen
+• Level 1
 -->
 
 <HTML>
@@ -453,8 +453,6 @@ NEXT:
 					if(!GPU.gameLoaded || GPU.gameWon)											
 						return;					
 
-					console.log("camVel: " + this.vel);
-
 					this.ApplySceneGraph();					
 					this.transform.doRotations(this.rot);
 
@@ -464,10 +462,16 @@ NEXT:
 					var rightY = this.RightStickY();
 
 					//reset x and z vel every frame, but retain gravity
-					//how to get explode vel for camera?
-					this.vel[0] = 0;
-					this.vel[1] += (1/60) * -0.8;
-					this.vel[2] = 0;										
+					//how to get explode vel for camera?					
+					//isLaunching variable to not zero velocity
+					//while launching, cap x and z speed to max(launch speed, movement speed)
+
+					this.vel[1] += (1/60) * -0.8;					
+					if(this.launchVec == undefined)
+					{
+						this.vel[0] = 0;						
+						this.vel[2] = 0;
+					}
 
 					//if a stick is being held
 					var rotIntensity = (math.abs(leftX) > this.stickDeadzone) ? math.abs(leftX) : 1.0;
@@ -512,6 +516,12 @@ NEXT:
 						this.vel[1] += this.strafeSpeed * this.transform.right[1] * strafeIntensity;
 						this.vel[2] += this.strafeSpeed * this.transform.right[2] * strafeIntensity;
 					}
+
+					if(this.launchVec != undefined)
+					{
+						this.vel[0] = math.max(this.launchVec[0], this.vel[0]);
+						this.vel[2] = math.max(this.launchVec[2], this.vel[2]);
+					}
 														
 					var ignoreCollision = false;
 					var standingOnCrater = false;										
@@ -548,8 +558,7 @@ NEXT:
 					{
 						
 						ignoreCollision = true;			
-						//hard-coded fix for moving above crater
-						console.log("setting cam y");
+						//hard-coded fix for moving above crater						
 						this.localPos[1] = this.closestCraterPos[1] + this.sideLength + 0.01;
 					}				
 					
@@ -561,7 +570,11 @@ NEXT:
 					// console.log("ignoreCollision: " + ignoreCollision);
 					// console.log("standingOnCrater: " + standingOnCrater);
 					var collision = this.MoveAndSlide(ignoreCollision, standingOnCrater);
-					//rework Move functions?
+					//zero explosion speed once camera hits a solid
+					if(collision != undefined)
+						this.launchVec = undefined;
+					
+						//rework Move functions?
 					// if(collision instanceof CustomObj)
 					// {
 					// 	this.vel[0] += collision.vel[0];
@@ -1094,9 +1107,7 @@ NEXT:
 					if(obj instanceof Camera)
 					{
 						//reset camera and take damage
-						obj.hp--;
-						console.log("moving camera");
-						console.log("cam respawnPos: " + obj.respawnPos);
+						obj.hp--;						
 
 						//how to make this not overriden by modeandslide?
 						obj.localPos = [ obj.respawnPos[0], obj.respawnPos[1], obj.respawnPos[2] ];
@@ -1269,6 +1280,7 @@ NEXT:
 					//set isLaunchable to true
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 160, new Uint32Array([1]));
 					this.vel = [0,0,0];
+					this.launchVel = 40;
 					
 					console.log("parse vertices for rope");
 					var result = ParseVertices(window.rope1, window.rope1Mtl);
@@ -1369,12 +1381,18 @@ NEXT:
 						dirToObj = this.Normalize(dirToObj);
 						
 						//remove distToObj?
-						obj.vel[0] = (dirToObj[0] * 80) * (1/60);
-						obj.vel[1] = (dirToObj[1] * 80) * (1/60);
-						obj.vel[2] = (dirToObj[2] * 80) * (1/60);
+						var launchVec = [];
+						launchVec[0] = (dirToObj[0] * this.launchVel) * (1/60);
+						launchVec[1] = (dirToObj[1] * this.launchVel) * (1/60);
+						launchVec[2] = (dirToObj[2] * this.launchVel) * (1/60);
+
+						obj.vel = launchVec;
 
 						if(obj instanceof Camera)
-							console.log("launchVel for camera: " + ((dirToObj[0] * 80) * (1/60)) + ", " + ((dirToObj[1] * 80) * (1/60)) + ", " + (dirToObj[2] * 80) * (1/60));
+						{
+							obj.launchVec = launchVec;
+							//console.log("launchVel for camera: " + ((dirToObj[0] * 80) * (1/60)) + ", " + ((dirToObj[1] * 80) * (1/60)) + ", " + (dirToObj[2] * 80) * (1/60));
+						}
 
 						if(obj instanceof Tnt)
 						{
