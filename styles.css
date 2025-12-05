@@ -21,6 +21,15 @@ button
     width: 300px;        
 }
 
+.heart
+{
+    position: absolute;     
+    transform: translateX(-50%);
+    width: 100px;
+    height: 100px;    
+    visibility: hidden; /*hide until canvas loads*/
+}
+
 #title
 {
     visibility: hidden;

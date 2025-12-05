@@ -554,16 +554,19 @@ class GameObject
 		}
 		//object moving is a trigger
 		else
-		{
-			this.pos = newXZ;
+		{	
+			this.localPos[0] += this.vel[0];			
+			this.localPos[1] += this.vel[1];						
+			this.localPos[2] += this.vel[2];
+
 			for(var tr in GPU.Trigger)
 			{
 				if(GPU.Trigger[tr] == this)
 					continue;
 
-				if(this.CheckCollision(this, newXZ, GPU.Trigger[tr], GPU.Trigger[tr].pos))
-					console.log("TRIGGER ENTERED");	
-			}
+				//if(this.CheckCollision(this, this.localPos, GPU.Trigger[tr], GPU.Trigger[tr].pos))
+					//console.log("TRIGGER ENTERED ANOTHER TRIGGER");
+			}			
 		}
 
 		return objectHit;

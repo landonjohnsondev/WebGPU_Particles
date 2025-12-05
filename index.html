@@ -1,9 +1,8 @@
 <!--
 NEXT:
-• Spike side attack
-• Creeper metal sequence
-• Move with grass blocks
-• Proceed to win screen
+• Take damage red flash?
+• Replay makes strafe go into sky?
+• Move with grass blocks?
 • Level 1
 -->
 
@@ -28,22 +27,28 @@ NEXT:
 				<h1 id="creditsText">Credits</h1>
 			</button>
 
-			<h1 id="Landon" class="centerText" style="top: 50%;">Landon Johnson</h1>
-			<h1 id="Jasmine" class="centerText" style="top: 40%;">Jasmine Rodriguez</h1>
+			<h1 id="Landon" class="centerText" style="top: 40%;">Landon Johnson</h1>
+			<h1 id="Jasmine" class="centerText" style="top: 50%;">Jasmine Rodriguez</h1>
 
 			<button id="back" style="right: 75%; top: 75%;" onclick="GPU.HideCredits(); GPU.ShowTitleScreen()">
 				<h1>Back</h1>
-			</button>
+			</button>			
 
 			<h1 id="win" class="centerText" style="top: 45%; font-size: 30pt;">You Win!</h1>
-			<button id="returnBtn" style="right: 75%; top: 75%;" onclick="GPU.HideWinScreen(); GPU.ShowTitleScreen(); GPU.ResetGame(); document.getElementById('titleMusic').play()">
+			<button id="returnBtn" style="right: 75%; top: 75%;" onclick="GPU.HideWinScreen(); GPU.ShowTitleScreen(); GPU.ResetGame();">
 				<h1 id="returnText">Main Menu</h1>
 			</button>
 
-			<!-- https://pixabay.com/music/video-games-to-the-death-159171/ -->
+			<img src="heart.png" id="heart1" class="heart" style="top: 80%; left: 77%">
+			<img src="heart.png" id="heart2" class="heart" style="top: 80%; left: 85%">
+			<img src="heart.png" id="heart3" class="heart" style="top: 80%; left: 93%">
+			
 			<audio id="boom" src="Audio/VineBoom.mp3"></audio>	
 			<!-- https://pixabay.com/music/build-up-scenes-dead-by-daylight-10243/ -->
 			<audio id="titleMusic" src="Audio/TitleMusic.mp3" loop autoplay></audio>
+			<!-- https://pixabay.com/sound-effects/ouch-oof-hurt-sound-effect-262616/ -->
+			<audio id="takeDamage" src="Audio/TakeDamage.mp3"></audio>
+			<!-- https://pixabay.com/music/video-games-to-the-death-159171/ -->
 			<audio id="bossMusic" src="Audio/BossMusic.mp3" loop autoplay></audio>
 			<audio id="creeperHurt" src="Audio/CreeperHurt.mp3"></audio>
 		</BODY>
@@ -95,8 +100,7 @@ NEXT:
 				dummyPos.push(1);
 
 				for(let i = 0; i < GPU.numExplodePositions; i++)
-				{
-					console.log("set all explode positions for current objects to " + dummyPos);					
+				{									
 					let initialOffset = GPU.explodePosInitialOffset;					
 					for(var j in GPU.Visual)
 						GPU.device.queue.writeBuffer(GPU.Visual[j].uniformBuffer, initialOffset + (16 * i), new Float32Array(dummyPos));
@@ -128,6 +132,18 @@ NEXT:
 				for(var i in GPU.Trigger)
 					GPU.device.queue.writeBuffer(GPU.Trigger[i].uniformBuffer, initialOffset + (16 * idx), new Float32Array(pos));
 			}				
+
+			function ClearExplosions()
+			{
+				console.log("CLEARING EXPLOSIONS");
+				GPU.explodePos = [];						
+				InitExplodePositions([9999,9999,9999]);
+				var craters = GPU.GetObjectsOfType(Crater);
+				for(let i = 0; i < craters.length; i++)
+				{
+					GPU.DestroyObject(craters[i].id);
+				}				
+			}
 
 			class PointLight extends Light
 			{
@@ -427,6 +443,58 @@ NEXT:
 					this.hp = 3;
 
 					this.stickDeadzone = 0.05;
+
+					this.invincibilityTimer = 0.0;
+					this.invincibilityTime = 0.5;
+				}
+
+				TakeDamage(damage)
+				{
+					if(this.isInvincible)
+						return;
+
+						this.isInvincible = true;
+					
+					this.hp -= damage;					
+					document.getElementById("takeDamage").play();
+					if(this.hp <= 2)
+						document.getElementById("heart3").style.visibility = "hidden";
+
+					if(this.hp <= 1)
+					{
+						document.getElementById("heart2").style.visibility = "hidden";
+						document.getElementById("heart3").style.visibility = "hidden";
+					}	
+					
+					if(this.hp <= 0)
+					{
+						document.getElementById("heart1").style.visibility = "hidden";
+						document.getElementById("heart2").style.visibility = "hidden";
+						document.getElementById("heart3").style.visibility = "hidden";
+
+						GPU.GetObjectOfType(Fade).fadeState = "fadeOut";
+						GPU.GetObjectOfType(Fade).isFirstFade = true;				
+						this.standingOnCrater = false;
+						this.ignoreCollision = false;
+						this.launchVec = undefined;
+						this.vel = [0,0,0];
+
+						var flames = GPU.GetObjectsOfType(Flame);
+						for(let i = 0; i < flames.length; i++)
+						{
+							GPU.DestroyObject(flames[i].id);
+						}
+
+						ClearExplosions();
+
+						//first destroy all fire to unfuse any tnt
+						//fade to black
+						//reset cam hp
+						//reset cam launch vec and other cam vars since it doesn't get destroyed							
+						//DestroyAllObjects (besides cam and fade)
+						//rerun SlowStart
+						//fade back in		
+					}
 				}
 
 				UpdateCollision()
@@ -461,6 +529,16 @@ NEXT:
 					var rightX = this.RightStickX();
 					var rightY = this.RightStickY();
 
+					if(this.isInvincible)
+					{
+						this.invincibilityTimer += (1/60);
+						if(this.invincibilityTimer > this.invincibilityTime)
+						{
+							this.isInvincible = false;
+							this.invincibilityTimer = 0.0;
+						}
+					}
+
 					//reset x and z vel every frame, but retain gravity
 					//how to get explode vel for camera?					
 					//isLaunching variable to not zero velocity
@@ -469,9 +547,20 @@ NEXT:
 					this.vel[1] += (1/60) * -0.8;					
 					if(this.launchVec == undefined)
 					{
-						this.vel[0] = 0;						
+						this.vel[0] = 0;
 						this.vel[2] = 0;
 					}
+					else
+					{
+						//redundant but here for readability
+						this.vel[0] = this.vel[0];
+						this.vel[1] = this.vel[1];
+						this.vel[2] = this.vel[2];
+					}
+
+					//what to do when launch vel is set, ex: (15, 10, -6)?
+					//cap speed to launch vel but allow decreasing speed
+					//if adding a vel would increase speed, prevent it, otherwise add it					
 
 					//if a stick is being held
 					var rotIntensity = (math.abs(leftX) > this.stickDeadzone) ? math.abs(leftX) : 1.0;
@@ -489,15 +578,24 @@ NEXT:
 					var moveIntensity = (math.abs(leftY) > this.stickDeadzone) ? math.abs(leftY) : 1.0;
 					if(GPU.CheckKey('W') || this.LeftStickY() > this.stickDeadzone || this.UpDpadHeld())
 					{
-						this.vel[0] += this.transform.forward[0] * this.moveSpeed * moveIntensity;
-						this.vel[1] += this.transform.forward[1] * this.moveSpeed * moveIntensity;
-						this.vel[2] += this.transform.forward[2] * this.moveSpeed * moveIntensity;
+						var newVel = [ this.vel[0], this.vel[1], this.vel[2] ];
+						newVel[0] += this.transform.forward[0] * this.moveSpeed * moveIntensity;
+						newVel[1] += this.transform.forward[1] * this.moveSpeed * moveIntensity;
+						newVel[2] += this.transform.forward[2] * this.moveSpeed * moveIntensity;
+
+						//always add vel if no launchVec. if launchVec, only allows lower speeds
+						if(this.launchVec == undefined || math.hypot(newVel) < math.hypot(this.vel))
+							this.vel = [newVel[0], newVel[1], newVel[2] ];
 					}
 					if(GPU.CheckKey('S') || this.LeftStickY() < -this.stickDeadzone || this.DownDpadHeld())
 					{
-						this.vel[0] -= this.transform.forward[0] * this.moveSpeed * moveIntensity;
-						this.vel[1] -= this.transform.forward[1] * this.moveSpeed * moveIntensity;
-						this.vel[2] -= this.transform.forward[2] * this.moveSpeed * moveIntensity;
+						var newVel = [ this.vel[0], this.vel[1], this.vel[2] ];
+						newVel[0] -= this.transform.forward[0] * this.moveSpeed * moveIntensity;
+						newVel[1] -= this.transform.forward[1] * this.moveSpeed * moveIntensity;
+						newVel[2] -= this.transform.forward[2] * this.moveSpeed * moveIntensity;
+
+						if(this.launchVec == undefined || math.hypot(newVel) < math.hypot(this.vel))
+							this.vel = [ newVel[0], newVel[1], newVel[2] ];
 					}					
 
 					//STRAFE CONTROLS
@@ -505,23 +603,25 @@ NEXT:
 					var strafeIntensity = (math.abs(rightX) > this.stickDeadzone) ? math.abs(rightX) : 1.0;
 					if(GPU.CheckKey('%') || this.RightStickX() < -this.stickDeadzone)
 					{						
-						this.vel[0] -= this.strafeSpeed * this.transform.right[0] * strafeIntensity;
-						this.vel[1] -= this.strafeSpeed * this.transform.right[1] * strafeIntensity;
-						this.vel[2] -= this.strafeSpeed * this.transform.right[2] * strafeIntensity;
+						var newVel = [ this.vel[0], this.vel[1], this.vel[2] ];
+						newVel[0] -= this.strafeSpeed * this.transform.right[0] * strafeIntensity;
+						newVel[1] -= this.strafeSpeed * this.transform.right[1] * strafeIntensity;
+						newVel[2] -= this.strafeSpeed * this.transform.right[2] * strafeIntensity;
+
+						if(this.launchVec == undefined || math.hypot(newVel) < math.hypot(this.vel))
+							this.vel = [ newVel[0], newVel[1], newVel[2] ];
 					}
 					//Right key pressed. this is right key apparently
 					if(GPU.CheckKey('\'') || this.RightStickX() > this.stickDeadzone)
 					{						
-						this.vel[0] += this.strafeSpeed * this.transform.right[0] * strafeIntensity;
-						this.vel[1] += this.strafeSpeed * this.transform.right[1] * strafeIntensity;
-						this.vel[2] += this.strafeSpeed * this.transform.right[2] * strafeIntensity;
-					}
+						var newVel = [ this.vel[0], this.vel[1], this.vel[2] ];
+						newVel[0] += this.strafeSpeed * this.transform.right[0] * strafeIntensity;
+						newVel[1] += this.strafeSpeed * this.transform.right[1] * strafeIntensity;
+						newVel[2] += this.strafeSpeed * this.transform.right[2] * strafeIntensity;
 
-					if(this.launchVec != undefined)
-					{
-						this.vel[0] = math.max(this.launchVec[0], this.vel[0]);
-						this.vel[2] = math.max(this.launchVec[2], this.vel[2]);
-					}
+						if(this.launchVec == undefined || math.hypot(newVel) < math.hypot(this.vel))
+							this.vel = [ newVel[0], newVel[1], newVel[2] ];
+					}					
 														
 					var ignoreCollision = false;
 					var standingOnCrater = false;										
@@ -535,19 +635,17 @@ NEXT:
 					}
 
 					//falling into crater, 6.5 is kinda hardcoded based on camRadius so you don't fall over and over
-					if(GPU.explodePos.length > 0 && 
+					if(this.closestCraterPos != undefined && 
 						this.VectorDistance(this.pos, this.closestCraterPos) < 6.5)
-					{
-						//console.log("first if");
+					{						
 						ignoreCollision = true;
 					}
 					//moving along crater, allow jumping
-					else if(GPU.explodePos.length > 0 && 
+					else if(this.closestCraterPos != undefined && 
 						this.pos[1] < this.closestCraterPos[1] &&
 						this.vel[1] < 0.4 &&
 						this.Between( this.VectorDistance(this.pos, this.closestCraterPos), 6.5, 8.5 ) )
 					{						
-						//console.log("second if");
 						standingOnCrater = true;					
 					}
 					//exiting crater
@@ -560,32 +658,16 @@ NEXT:
 						ignoreCollision = true;			
 						//hard-coded fix for moving above crater						
 						this.localPos[1] = this.closestCraterPos[1] + this.sideLength + 0.01;
-					}				
+					}										
 					
-					// console.log("xzDistToCrater: " + this.xzDistToCrater);
-					// console.log("newXZDistToCrater: " + this.newXZDistToCrater);
-					// if(this.closestCraterPos != undefined)
-					// 	console.log("this.Between(this.pos]1], this.closestCraterPos[1] - 0.5, this.closestCraterPos[1] + 0.5): " + this.Between(this.pos[1], this.closestCraterPos[1] - 0.5, this.closestCraterPos[1] + 0.5));
-
-					// console.log("ignoreCollision: " + ignoreCollision);
-					// console.log("standingOnCrater: " + standingOnCrater);
 					var collision = this.MoveAndSlide(ignoreCollision, standingOnCrater);
 					//zero explosion speed once camera hits a solid
-					if(collision != undefined)
-						this.launchVec = undefined;
-					
-						//rework Move functions?
-					// if(collision instanceof CustomObj)
-					// {
-					// 	this.vel[0] += collision.vel[0];
-					// 	this.vel[2] += collision.vel[2];
-					// }					
+					if(collision != undefined || standingOnCrater)
+						this.launchVec = undefined;											
 				}
 
 				ClosestCraterPos()
-				{
-					if(GPU.explodePos.length == 0)											
-						return undefined;					
+				{								
 
 					let minDist = 9999;
 					let closestIdx = -1;
@@ -601,6 +683,10 @@ NEXT:
 							closestIdx = i;
 						}
 					}
+
+					if(GPU.explodePos[closestIdx] == undefined)
+						return undefined;
+
 					return [ GPU.explodePos[closestIdx][0], GPU.explodePos[closestIdx][1], GPU.explodePos[closestIdx][2] ];
 				}
 
@@ -867,8 +953,10 @@ NEXT:
 						this.goalIdx--;
 						if(this.goalIdx < 0)
 						{
-							//if you want tnt to explode immediately when fire reaches it, put code here
-							this.parent.parent.Explode();
+							//explode immediately when fire reaches tnt
+							var tnt = this.parent.parent;
+							tnt.Explode();					
+
 							GPU.DestroyObject(this.smoke.id);
 							GPU.DestroyObject(this.id);
 						}
@@ -979,16 +1067,78 @@ NEXT:
 				constructor(parserData, rawTexture, normalMap, pos, rot, scale)
 				{					
 					super(parserData, rawTexture, normalMap, pos, rot, scale);										
-					this.vel = [0,0,0];					
-					this.timer = 0.0;
+					this.vel = [0,0,0];															
+					this.hp = 3;		
+
+					this.flashDuration = 1.5;
+					this.flashInterval = 0.1;
+					this.timeFlashing = 0.0;
+					
+					this.spikeAttackTime = 10.0;
+					this.spikeAttackTimer = 0.0;
+
+					this.platformAttackTime = 14.0;
+					this.platformAttackTimer = 0.0;
+					this.timePerPlatform = 1.5;
+					this.platformTimer = 0.0;					
 					this.curPlatform = 0;
-					this.hp = 3;					
+
+					this.metalAttackTimer = 0.0;
+					this.metalAttackTime = 8.0;
+
+					this.curAttack = "platforms";					
 				}
 
 				TakeDamage(damage)
 				{
 					document.getElementById("creeperHurt").play();
 					this.hp -= damage;
+					console.log("boss hp is now " + this.hp);
+					this.curAttack = "metal";
+					this.StartMetal();
+				}
+
+				StartMetal()
+				{
+					//stop any other attacks and destroy their spikes					
+					var sideSpikes = GPU.GetObjectsOfType(SideSpikes);
+					var lowSpikes = GPU.GetObjectsOfType(LowSpikes);					
+					for(let i = 0; i < sideSpikes.length; i++)
+					{
+						GPU.DestroyObject(sideSpikes.id);
+					}
+					for(let i = 0; i < lowSpikes.length; i++)
+					{
+						GPU.DestroyObject(lowSpikes.id);
+					}
+
+					this.spikeAttackTimer = 0.0;
+					this.platformAttackTimer = 0.0;
+					this.platformTimer = 0.0;
+
+					var result = ParseVertices(window.cube, window.cubeMtl);
+					var metal = GPU.CreateObject(2, Metal, [5, this.BottomY()-0.99, this.pos[2] + 25], [0,0,0], [25,1,25], result, window.metalTexture);
+					metal.finishedMetalAttack = false;					
+					metal.RestockTnt();
+					//make metal fast enough for player to not get back to a crater
+					metal.speed = 0.8;
+				}
+
+				StartFlashingRed()
+				{
+					//set flashing red to true
+					this.flashOn = true;
+					GPU.device.queue.writeBuffer(this.uniformBuffer, 188, new Uint32Array([1]));
+					this.flashTimer = this.flashInterval;
+					this.isFlashing = true;
+				}				
+
+				//how to fix flat flame?
+				ShootFlame()
+				{
+					var scaleFactor = 0.2;
+					var fireScale = [ this.scale[0] * scaleFactor, this.scale[1] * scaleFactor, this.scale[2] * scaleFactor ];
+					var flame = GPU.CreateObject(2, Flame, [0,0,0], [0,0,1.6], fireScale);
 				}
 
 				//shoot two platforms that move outward each time?
@@ -1001,42 +1151,112 @@ NEXT:
 					var leftPlatform = GPU.CreateObject(1, MovingPlatform, pos1, [0,0,0], [2,1,2], result, window.grassTexture);
 					var rightPlatform = GPU.CreateObject(1, MovingPlatform, pos2, [0,0,0], [2,1,2], result, window.grassTexture);
 					leftPlatform.vel[2] = -0.08;			
-					rightPlatform.vel[2] = -0.08;
+					rightPlatform.vel[2] = -0.08;					
+				}				
 
-					this.curPlatform++;
-				}
-
-				//how to fix flat flame?
-				ShootFlame()
+				SideSpikeAttack()
 				{
-					var scaleFactor = 0.2;
-					var fireScale = [ this.scale[0] * scaleFactor, this.scale[1] * scaleFactor, this.scale[2] * scaleFactor ];
-					var flame = GPU.CreateObject(2, Flame, [0,0,0], [0,0,1.6], fireScale);
+					var result = ParseVertices(window.sideSpikes, window.sideSpikesMtl);
+					var leftFarSpikes = GPU.CreateObject(2, SideSpikes, [-14,10,0], [0,math.PI,0], [2,2,2], result);
+					var spikeOffset = leftFarSpikes.farZ * 2.1;
+					var leftNearSpikes = GPU.CreateObject(2, SideSpikes, [-14,10,0 - spikeOffset], [0,math.PI,0], [2,2,2], result);
+
+					leftFarSpikes.vel[0] = 0.05;
+					leftNearSpikes.vel[0] = 0.05;
+
+					var rightFarSpikes = GPU.CreateObject(2, SideSpikes, [20,10,0], [0,0,0], [2,2,2], result);
+					var rightNearSpikes = GPU.CreateObject(2, SideSpikes, [20,10,0 - spikeOffset], [0,0,0], [2,2,2], result);
+
+					rightFarSpikes.vel[0] = -0.05;
+					rightNearSpikes.vel[0] = -0.05;
 				}
 
 				Update()
 				{
 					this.ApplySceneGraph();
-					this.vel[1] += (1/60) * -0.1;
-					this.timer += (1/60);
-					
-					if(this.timer > 1.5)
+					this.vel[1] += (1/60) * -0.1;					
+
+					//attack logic
+					//alternate between side spikes and moving platforms
+					//use a delay after each before starting the next one
+
+					if(this.curAttack == "spikes")
 					{
-						this.timer = 0;
-						this.ShootPlatforms();
-						if(this.curPlatform > 4)
+						this.spikeAttackTimer += (1/60);
+						if(this.spikeAttackTimer > this.spikeAttackTime)
+						{
+							this.spikeAttackTimer = 0.0;						
+							this.curAttack = "platforms";
 							this.curPlatform = 0;
+						}
+					}
+					else if(this.curAttack == "platforms")
+					{
+						this.platformAttackTimer += (1/60);
+						this.platformTimer += (1/60);
+						if(this.platformTimer > this.timePerPlatform && this.curPlatform <= 4)
+						{
+							this.platformTimer = 0.0;
+							this.ShootPlatforms();
+							this.curPlatform++;								
+						}
+						if(this.platformAttackTimer > this.platformAttackTime)
+						{
+							this.platformAttackTimer = 0.0;	
+							this.curPlatform = 0;
+							this.SideSpikeAttack();
+							this.curAttack = "spikes";
+						}
+					}
+					else if(this.curAttack == "metal")
+					{
+						this.metalAttackTimer += (1/60);
+						if(this.metalAttackTimer > this.metalAttackTime)
+						{
+							this.curAttack = "platforms";
+							this.curPlatform = 0;
+							GPU.GetObjectOfType(Metal).finishedMetalAttack = true;
+							this.metalAttackTimer = 0.0;
+						}						
+					}	
+					// console.log("metalAttackTimer: " + this.metalAttackTimer);				
+					// console.log("platformAttackTimer: " + this.platformAttackTimer);
+					// console.log("platformTimer: " + this.platformTimer);
+					// console.log("curPlatform: " + this.curPlatform);
+					// console.log("curAttack: " + this.curAttack);
+
+					if(this.timeFlashing > this.flashDuration)
+					{
+						this.isFlashing = false;
+						this.flashOn = false;
+						this.timeFlashing = 0.0;			
+						//set flashing red to true/false
+						GPU.device.queue.writeBuffer(this.uniformBuffer, 188, new Uint32Array([this.flashOn]));
+
+						if(this.hp <= 0)
+						{							
+							GPU.DestroyAllObjects();
+							document.getElementById("bossMusic").pause();
+							document.getElementById("bossMusic").currentTime = 0.0;
+							GPU.HideHearts();
+							GPU.ShowWinScreen();
+							GPU.gameWon = true;
+						}
 					}
 
-					//win game testing
-					// if(this.timer > 3)
-					// {
-					// 	GPU.DestroyAllObjects();
-					// 	document.getElementById("bossMusic").pause();
-					// 	document.getElementById("bossMusic").currentTime = 0.0;
-					// 	GPU.ShowWinScreen();
-					// 	GPU.gameWon = true;
-					// }
+					if(this.isFlashing)
+					{
+						this.timeFlashing += (1/60);
+						this.flashTimer -= (1/60);
+						if(this.flashTimer < 0)
+						{
+							this.flashTimer = this.flashInterval;
+							this.flashOn = !this.flashOn;
+							//set flashing red to true/false
+							GPU.device.queue.writeBuffer(this.uniformBuffer, 188, new Uint32Array([this.flashOn]));
+						}
+					}
+
 					this.Move();
 				}
 
@@ -1088,18 +1308,20 @@ NEXT:
 				}
 			}
 
-			class SpikeGroup extends CustomObj
+			class SpikePit extends CustomObj
 			{
 				constructor(parserData, pos, rot, scale)
 				{
 					super(parserData, undefined, undefined, pos, rot, scale);
-				}
+				}				
 
 				Update()
 				{
 					this.ApplySceneGraph();					
-					this.vel[1] += (1/60) * -0.1;
-					this.Move();
+					this.vel[1] += (1/60) * -0.1;					
+					var collision = this.Move();
+					// if(collision != undefined)
+					// 	console.log("spikes colliding with " + collision.id);
 				}
 
 				OnObjectStay(obj)
@@ -1107,15 +1329,193 @@ NEXT:
 					if(obj instanceof Camera)
 					{
 						//reset camera and take damage
-						obj.hp--;						
-
-						//how to make this not overriden by modeandslide?
-						obj.localPos = [ obj.respawnPos[0], obj.respawnPos[1], obj.respawnPos[2] ];
-						obj.ApplySceneGraph();
-						//obj.pos = [ obj.respawnPos[0], obj.respawnPos[1], obj.respawnPos[2] ];
+						if(obj.hp > 0)
+						{
+							obj.localPos = [ obj.respawnPos[0], obj.respawnPos[1], obj.respawnPos[2] ];
+							obj.TakeDamage(1);											
+						}
 					}
 				}
 
+				Render(commandPass)
+				{
+					this.IndexDraw(commandPass);
+				}
+			}
+
+			class SideSpikes extends CustomObj
+			{
+				constructor(parserData, pos, rot, scale)
+				{
+					super(parserData, undefined, undefined, pos, rot, scale);
+				}				
+
+				Update()
+				{
+					this.ApplySceneGraph();															
+					var collision = this.Move();
+					if(collision != undefined && !(collision instanceof Tnt) && !(collision instanceof Rope) && !(collision instanceof SideSpikes))
+					{
+						//console.log("spikes colliding with " + collision.id);
+						this.OnObjectStay(collision);
+						GPU.DestroyObject(this.id);
+					}
+				}
+
+				OnObjectStay(obj)
+				{
+					if(obj instanceof Camera)
+					{
+						//reset camera and take damage						
+						if(obj.hp > 0)
+						{
+							obj.localPos = [ obj.respawnPos[0], obj.respawnPos[1], obj.respawnPos[2] ];
+							obj.TakeDamage(1);														
+						}								
+					}
+				}
+
+				Render(commandPass)
+				{
+					this.IndexDraw(commandPass);
+				}
+			}
+			
+			class LowSpikes extends CustomObj
+			{
+				constructor(parserData, pos, rot, scale)
+				{
+					super(parserData, undefined, undefined, pos, rot, scale);
+				}				
+
+				Update()
+				{
+					this.ApplySceneGraph();															
+					var collision = this.Move();
+					if(collision != undefined && !(collision instanceof Tnt) && !(collision instanceof Rope) && !(collision instanceof SideSpikes))
+					{						
+						this.OnObjectStay(collision);
+						GPU.DestroyObject(this.id);
+					}
+
+					//hard code to bypass tnt
+					if(collision instanceof Tnt)
+					{
+						this.localPos[0] += this.vel[0];
+						this.localPos[1] += this.vel[1];
+						this.localPos[2] += this.vel[2];
+					}
+
+					//console.log("low spikes pos: " + this.pos);
+				}
+
+				OnObjectStay(obj)
+				{
+					if(obj instanceof Camera)
+					{
+						//reset camera and take damage						
+						if(obj.hp > 0)
+						{
+							obj.localPos = [ obj.respawnPos[0], obj.respawnPos[1], obj.respawnPos[2] ];
+							obj.TakeDamage(1);														
+						}					
+					}
+				}
+
+				Render(commandPass)
+				{
+					this.IndexDraw(commandPass);
+				}
+			}
+
+			class Metal extends CustomObj
+			{
+				constructor(parserData, rawTexture, normalMap, pos, rot, scale)
+				{
+					super(parserData, rawTexture, normalMap, pos, rot, scale);					
+					this.grass = GPU.GetObjectOfType(Grass);					
+
+					this.isTrigger = true;
+					this.finishedMetalAttack = false;
+					this.startedAttack = false;
+				}
+
+				LowSpikeAttack()
+				{					
+					var result = ParseVertices(window.lowSpikes, window.lowSpikesMtl);
+					var scaleFactor = 0.8;
+					var leftFarSpikes = GPU.CreateObject(2, LowSpikes, [-14,-2,4], [0,0,0], [scaleFactor,scaleFactor,scaleFactor], result);
+					var leftNearSpikes = GPU.CreateObject(2, LowSpikes, [-14,-2,-7], [0,0,0], [scaleFactor,scaleFactor,scaleFactor], result);
+					var leftNearerSpikes = GPU.CreateObject(2, LowSpikes, [-14,-2,-18], [0,0,0], [scaleFactor,scaleFactor,scaleFactor], result);
+					var spikeOffset = leftFarSpikes.farZ * 2.1;
+
+					leftFarSpikes.vel[0] = 0.06;					
+					leftNearSpikes.vel[0] = 0.06;					
+					leftNearerSpikes.vel[0] = 0.06;			
+				}
+
+				RestockTnt()
+				{
+					var tnts = GPU.GetObjectsOfType(Tnt);
+					for(let i = 0; i < tnts.length; i++)
+					{
+						if(tnts[i].inQueue && !tnts[i].isCreeperTnt)
+						{
+							tnts[i].inQueue = false;
+							//reset rope's flameWorldPos
+							GPU.device.queue.writeBuffer(tnts[i].directChildren[0].uniformBuffer, 144, new Float32Array([9999,9999,9999,1]));
+							//reset isFlashing
+							tnts[i].isFlashing = false;
+							GPU.device.queue.writeBuffer(tnts[i].uniformBuffer, 156, new Uint32Array([0]));
+							//reset litFire
+							tnts[i].directChildren[0].litFire = 0;				
+						}
+					}
+					//reset isFlashing and flameWorld pos
+					console.log("RESTOCKED TNT");
+				}				
+
+				Update()
+				{
+					this.ApplySceneGraph();					
+
+					if(this.finishedMetalAttack)				
+					{	
+						this.vel[2] = -this.speed;						
+					}			
+					//once metal fully covers ground, clear all explode positions 
+					else if(this.NearZ() < -24)
+					{											
+						ClearExplosions();
+						if(!this.startedAttack)
+						{
+							this.LowSpikeAttack();
+							this.startedAttack = true;
+						}
+						//disable isGrass, reenable later
+						GPU.device.queue.writeBuffer(this.grass.uniformBuffer, 184, new Uint32Array([0]));
+
+						this.vel = [0,0,0];
+					}
+					else if(this.NearZ() > -24)
+					{						
+						this.vel[2] = -this.speed;
+					}							
+					else
+					{
+						this.vel = [0,0,0];	
+					}
+
+					if(this.NearZ() < -90)
+					{						
+						//reenable isGrass to allow exploding
+						GPU.device.queue.writeBuffer(this.grass.uniformBuffer, 184, new Uint32Array([1]));
+						GPU.DestroyObject(this.id);
+					}
+
+					this.Move();
+				}
+			
 				Render(commandPass)
 				{
 					this.IndexDraw(commandPass);
@@ -1270,7 +1670,11 @@ NEXT:
 					this.flashInterval = 0.15;
 					this.flashOn = 1;
 					this.explodeTimer = 1.5;
-					this.isFlashing = false;										
+					this.isFlashing = false
+					
+					this.spawnPos = pos;									
+					this.spawnScale = scale;					
+
 					//get idx this way so it works when resetting game
 					this.tntIdx = GPU.GetObjectsOfType(Tnt).length;															
 
@@ -1285,8 +1689,10 @@ NEXT:
 					console.log("parse vertices for rope");
 					var result = ParseVertices(window.rope1, window.rope1Mtl);
 					//keep scale as 1,1,1 for now otherwise flame is messed up since it's a child
-					var rope = GPU.CreateObject(2, Rope, [0,0,0], [0,0,0], [1,1,1], result);	
+					var rope = GPU.CreateObject(2, Rope, [0,0,0], [0,0,0], [1,1,1], result);
 					rope.SetParent(this);
+
+					this.inQueue = false;
 				}
 
 				SortByTntIdx(tntList)
@@ -1333,18 +1739,27 @@ NEXT:
 							[2.5, 2.5, 2.5]);
 					}
 										
+					//this could mess up explosion if the creeper tnt is recreated
 					SetExplodePos(this.pos, this.tntIdx);
 					this.LaunchObjects();
-					document.getElementById("boom").play();
-					//destroys rope
-					GPU.DestroyObject(this.directChildren[0].id);
-					GPU.DestroyObject(this.id);
+					document.getElementById("boom").play();										
+
+					if(this.isCreeperTnt)
+					{
+						var result = ParseVertices(window.tnt, window.tntMtl);
+						var tnt = GPU.CreateObject(1, Tnt, this.spawnPos, [0,0,0], this.spawnScale, result, window.tntTexture);
+						tnt.isCreeperTnt = true;
+						GPU.DestroyObject(this.id);
+					}				
+					else
+					{
+						this.inQueue = true;
+						this.localPos = [ this.spawnPos[0], this.spawnPos[1], this.spawnPos[2] ];
+					}
 				}
 
 				LaunchObjects()
 				{
-					console.log("launching objects");
-
 					//this is after all constructors have ran, so this includes the current tnt
 					let launchables = GPU.GetObjectsOfType(Tnt);
 					let camera = GPU.GetObjectOfType(Camera);					
@@ -1358,17 +1773,29 @@ NEXT:
 						if(obj == this)
 							continue;
 											
-						var distToObj = this.VectorDistance(this.pos, obj.pos);
+						var distToObj = this.VectorDistance(this.pos, obj.pos);											
 
-						//compare edges in case an object is very large and therefore has a far away center (like the creeper boss)
-						var xInRange = ( math.abs(this.pos[0] - obj.rightX) < 8 ) || ( math.abs(this.pos[0] - obj.leftX) < 8 );
-						var yInRange = ( math.abs(this.pos[1] - obj.topY) < 8 ) || ( math.abs(this.pos[1] - obj.bottomY) < 8 );
-						var zInRange = ( math.abs(this.pos[2] - obj.farZ) < 8 ) || ( math.abs(this.pos[2] - obj.nearZ) < 8 );
+						let objRight = obj.pos[0] + obj.rightX;
+						let objLeft = obj.pos[0] + obj.leftX;
+						
+						let objTop = obj.pos[1] + obj.topY;
+						let objBottom = obj.pos[1] + obj.bottomY;
+						
+						let objNear = obj.pos[2] + obj.nearZ;
+						let objFar = obj.pos[2] + obj.farZ;
 
 						if(obj instanceof Boss)
-						{
-							obj.TakeDamage(1);
-							console.log("boss hp is now " + obj.hp);
+						{							
+							//compare edges in case an object is very large and therefore has a far away center (like the creeper boss)
+							var xInRange = ( math.abs(this.pos[0] - objRight) < 8 ) || ( math.abs(this.pos[0] - objLeft) < 8 );
+							var yInRange = ( math.abs(this.pos[1] - objTop) < 8 ) || ( math.abs(this.pos[1] - objBottom) < 8 );
+							var zInRange = ( math.abs(this.pos[2] - objFar) < 8 ) || ( math.abs(this.pos[2] - objNear) < 8 );
+							
+							if(xInRange && yInRange && zInRange)
+							{
+								obj.TakeDamage(1);
+								obj.StartFlashingRed();
+							}
 						}
 
 						if(distToObj > 8)
@@ -1379,8 +1806,7 @@ NEXT:
 						dirToObj[1] = obj.pos[1] - this.pos[1];
 						dirToObj[2] = obj.pos[2] - this.pos[2];
 						dirToObj = this.Normalize(dirToObj);
-						
-						//remove distToObj?
+												
 						var launchVec = [];
 						launchVec[0] = (dirToObj[0] * this.launchVel) * (1/60);
 						launchVec[1] = (dirToObj[1] * this.launchVel) * (1/60);
@@ -1388,11 +1814,8 @@ NEXT:
 
 						obj.vel = launchVec;
 
-						if(obj instanceof Camera)
-						{
-							obj.launchVec = launchVec;
-							//console.log("launchVel for camera: " + ((dirToObj[0] * 80) * (1/60)) + ", " + ((dirToObj[1] * 80) * (1/60)) + ", " + (dirToObj[2] * 80) * (1/60));
-						}
+						if(obj instanceof Camera)						
+							obj.launchVec = launchVec;						
 
 						if(obj instanceof Tnt)
 						{
@@ -1403,15 +1826,27 @@ NEXT:
 				}
 
 				Update()
-				{
+				{					
 					this.ApplySceneGraph();
+					
+					if(this.inQueue)					
+						return;					
 
-					// this.localPos[0] += this.vel[0];
-					// this.localPos[1] += this.vel[1];
-					// this.localPos[2] += this.vel[2];
-
-					this.vel[1] += (1/60) * -0.1;
+					this.vel[1] += (1/60) * -0.1;					
 					this.Move();
+
+					if(this.isTitleTnt && this.pos[1] < -8)
+					{						
+						console.log("parse vertices for title tnt");
+						var result = ParseVertices(window.tnt, window.tntMtl);
+						var moveRangeX = 3;
+						var moveRangeY = 6;
+						var tnt = GPU.CreateObject(1, Tnt, [ this.titlePos[0] + (math.random() * moveRangeX - moveRangeX), this.titlePos[1] + (math.random() * moveRangeY - moveRangeY), this.titlePos[2] ], [0,0,0], [1,1,1], result, window.tntTexture);
+						tnt.isTitleTnt = true;
+						tnt.titlePos = this.titlePos;
+						GPU.DestroyObject(this.directChildren[0].id);
+						GPU.DestroyObject(this.id);
+					}
 
 					this.flashTimer -= (1/60);
 					if(this.flashTimer < 0 && this.isFlashing)
@@ -1422,13 +1857,7 @@ NEXT:
 						GPU.device.queue.writeBuffer(this.uniformBuffer, 156, new Uint32Array([this.flashOn]));
 					}					
 
-					if(this.isFlashing)
-					{
-						// EXPLODING
-						this.explodeTimer -= (1/60);
-						if(this.explodeTimer < 0)													
-							this.Explode();
-					}
+					//reworked code to handle exploding from flame
 				}			
 
 				StartFlashing()
@@ -1441,6 +1870,9 @@ NEXT:
 				
 				Render(commandPass)
 				{
+					if(this.inQueue)
+						return;
+
 					this.IndexDraw(commandPass);
 				}
 			}
@@ -1464,7 +1896,7 @@ NEXT:
 				}
 
 				Render(commandPass)
-				{
+				{					
 					this.IndexDraw(commandPass);
 				}
 			}
@@ -1540,9 +1972,11 @@ NEXT:
 
 						if(this.isFirstFade)
 						{
+							GPU.DestroyAllObjects();
 							GPU.SlowStart();
 							this.isFirstFade = false;
 							GPU.gameLoaded = true;
+							GPU.ShowHearts();
 							document.getElementById("bossMusic").play();
 							document.body.style.cursor = "none";
 						}
@@ -1604,19 +2038,50 @@ NEXT:
 					//start WebGPU rendering here
 					(async () =>
 					{						
-						await this.SetupGPU();
-						
-						//need to make camera early or else bind errors
-						this.camera = this.CreateObject(0, Camera, [4,-1,-5], [0,0,0]);												
+						await this.SetupGPU();								
+						this.TitleSlowStart();
 
 						requestAnimationFrame(FrameUpdate);
-						//basically a fade manager
-						var fade = this.CreateObject(0, Fade, [0,0,0], [0,0,0]);
 
 						//remove this comment to skip title screen
-						this.StartGame();
+						//this.StartGame();
 					})();
 										
+				}
+
+				TitleSlowStart()
+				{					
+					//need to make camera early or else bind errors
+					this.camera = this.CreateObject(0, Camera, [4,-1,-5], [0,0,0.5]);
+
+					//basically a fade manager
+					var fade = this.CreateObject(0, Fade, [0,0,0], [0,0,0]);
+
+					var l = this.CreateObject(0, DirectionalLight, [0, 5.0, 0], [0,0,0]);
+					l.color = [0.15,0.15,0.15];
+
+					var result = ParseVertices(window.cube, window.cubeMtl);
+					var movingGrass = GPU.CreateObject(1, MovingPlatform, [4,-3,2], [-math.PI/2,0,0], [30,1,15], result, window.grassTexture);				
+
+					var scaleReciprocal = [ 1 / movingGrass.localScale[0], 1 / movingGrass.localScale[1], 1 / movingGrass.localScale[2] ]
+					console.log("scale reciprocal: " + scaleReciprocal);
+
+					var tntRes = ParseVertices(window.tnt, window.tntMtl);
+					var leftPos = [-1, 13 + math.random() * 6 - 6, -1];
+					var rightPos = [9, 13 + math.random() * 6 - 6, -1];
+					var middlePos = [4, 13 + math.random() * 6 - 6, -1];
+
+					var leftTnt = this.CreateObject(1, Tnt, leftPos, [0,0,0], [1,1,1], tntRes, window.tntTexture);
+					var rightTnt = this.CreateObject(1, Tnt, rightPos, [0,0,0], [1,1,1], tntRes, window.tntTexture);
+					var middleTnt = this.CreateObject(1, Tnt, middlePos, [0,0,0], [1,1,1], tntRes, window.tntTexture);
+
+					leftTnt.titlePos = leftPos;
+					rightTnt.titlePos = rightPos;
+					middleTnt.titlePos = middlePos;
+
+					leftTnt.isTitleTnt = true;
+					rightTnt.isTitleTnt = true;
+					middleTnt.isTitleTnt = true;
 				}
 
 				StartGame()
@@ -1626,10 +2091,24 @@ NEXT:
 
 					// document.getElementById("titleMusic").pause();
 					// document.getElementById("titleMusic").currentTime = 0.0;
-					this.fadeTitleMusic = true;
+					this.fadeTitleMusic = true;					
 
 					GPU.GetObjectOfType(Fade).fadeState = "fadeOut";
 					GPU.GetObjectOfType(Fade).isFirstFade = true;
+				}
+
+				ShowHearts()
+				{
+					document.getElementById("heart1").style.visibility = "visible";
+					document.getElementById("heart2").style.visibility = "visible";
+					document.getElementById("heart3").style.visibility = "visible";
+				}
+
+				HideHearts()
+				{
+					document.getElementById("heart1").style.visibility = "hidden";
+					document.getElementById("heart2").style.visibility = "hidden";
+					document.getElementById("heart3").style.visibility = "hidden";
 				}
 
 				ShowCredits()
@@ -1665,9 +2144,13 @@ NEXT:
 
 				ShowWinScreen()
 				{
+					this.TitleSlowStart();
 					document.body.style.cursor = "";
 
-					document.getElementById("win").style.visibility = "visible";					
+					document.getElementById('titleMusic').currentTime = 0
+					document.getElementById('titleMusic').volume = 1
+
+					document.getElementById("win").style.visibility = "visible";			
 					document.getElementById("returnText").style.visibility = "visible";		
 					document.getElementById("returnBtn").style.visibility = "visible";					
 				}
@@ -1699,10 +2182,19 @@ NEXT:
 				}
 
 				async SlowStart()
-				{						
+				{				
+					console.log("parse vertices for ground");
+					var result = ParseVertices(window.cube, window.cubeMtl);
+					var ground = GPU.CreateObject(1, Grass, [0,-25,0], [0,0,0], [50,20,100], result, window.grassTexture);
+					ground.specularity = 105;
+
+					//var walkwayPos = [-15, 18, 20];
+
 					var cam = this.GetObjectOfType(Camera);
 					cam.localPos = [4, -1, -5];
+					//cam.localPos = walkwayPos;
 					cam.rot = [0,0,0];
+					cam.hp = 3;
 									
 					var result = ParseVertices(window.creeper, window.creeperMtl);					
 						
@@ -1717,25 +2209,34 @@ NEXT:
 					
 					//make spikes a trigger so the OnObjectStay camera teleport happens after the camera moves
 					var result = ParseVertices(window.spikes, window.spikesMtl);
-					var leftSpikes = this.CreateObject(2, SpikeGroup, [-6, -3, 15], [0,0,0], [1,1,1], result);
-					var rightSpikes = this.CreateObject(2, SpikeGroup, [16, -3, 15], [0,0,0], [1,1,1], result);
+					var leftSpikes = this.CreateObject(2, SpikePit, [-8, -3, 15], [0,0,0], [1.5,1.5,1.5], result);
+					var rightSpikes = this.CreateObject(2, SpikePit, [18, -3, 15], [0,0,0], [1.5,1.5,1.5], result);
 
 					var result = ParseVertices(window.tnt, window.tntMtl);
 					var tnt = this.CreateObject(1, Tnt, [5, 25, 15], [0,0,0], [2,2,2], result, window.tntTexture);
+					tnt.isCreeperTnt = true;
+					
+					//metal attack time long?
+
+					// tnt Object
+					//tnt needs to be made near the end of slow start so it can set explodePos on all objects
+					// console.log("parse vertices for tnt");
+					var result = ParseVertices(window.tnt, window.tntMtl);
+					var tnt1 = GPU.CreateObject(1, Tnt, [-6, 25, 0], [0,0,0], [1,1,1], result, window.tntTexture);															
+					var tnt2 = GPU.CreateObject(1, Tnt, [5, 25, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+					var tnt3 = GPU.CreateObject(1, Tnt, [16, 25, 0], [0,0,0], [1,1,1], result, window.tntTexture);
 
 					var result = ParseVertices(window.cube, window.cubeMtl);
-
 					var leftWall = this.CreateObject(1, CustomObj, [-20, 10, 15], [0,0,0], [2,25,50], result, window.grassTexture);
 					var rightWall = this.CreateObject(1, CustomObj, [30, 10, 15], [0,0,0], [2,25,50], result, window.grassTexture);
 					var farWall = this.CreateObject(1, CustomObj, [0, 10, 25], [0,0,0], [50,25,2], result, window.grassTexture);
 					var nearWall = this.CreateObject(1, CustomObj, [0, 10, -25], [0,0,0], [50,25,2], result, window.grassTexture);
 					var ceiling = this.CreateObject(1, CustomObj, [0, 45, -5], [0,0,0], [50,10,50], result, window.grassTexture);
 
-					var leftWalkway = this.CreateObject(1, CustomObj, [-15, 13, 23], [0,0,0], [8,2,15], result, window.woodTexture);
-					var leftWalkwayLip = this.CreateObject(1, CustomObj, [-9, 16, 23], [0,0,0], [2,3,14], result, window.woodTexture);
-
-					var rightWalkway = this.CreateObject(1, CustomObj, [25, 13, 23], [0,0,0], [8,2,15], result, window.woodTexture);
-					var rightWalkwayLip = this.CreateObject(1, CustomObj, [19, 16, 23], [0,0,0], [2,3,14], result, window.woodTexture);
+					var leftWalkway = this.CreateObject(1, CustomObj, [-13, 13, 23], [0,0,0], [8,2,15], result, window.woodTexture);
+					var leftWalkwayLip = this.CreateObject(1, CustomObj, [-7, 16, 23], [0,0,0], [2,3,14], result, window.woodTexture);
+					var rightWalkway = this.CreateObject(1, CustomObj, [23, 13, 23], [0,0,0], [8,2,15], result, window.woodTexture);
+					var rightWalkwayLip = this.CreateObject(1, CustomObj, [17, 16, 23], [0,0,0], [2,3,14], result, window.woodTexture);
 
 					var pointLight;
 					for(let i = 0; i < 5; i++)
@@ -1761,12 +2262,7 @@ NEXT:
 						// var spotlight = GPU.CreateObject(1, CustomObj, [i*2, 2, 1.5], [0,0,0], [0.5,0.5,0.5], result);
 					}		
 					var l = this.CreateObject(0, DirectionalLight, [5, 5.0, 0], [0,3,0]);
-					l.color = [0.15,0.15,0.15];
-
-					console.log("parse vertices for ground");
-					var result = ParseVertices(window.cube, window.cubeMtl);
-					var ground = GPU.CreateObject(1, Grass, [0,-25,0], [0,0,0], [50,20,100], result, window.grassTexture);
-					ground.specularity = 105;
+					l.color = [0.15,0.15,0.15];					
 
 					// console.log("parse vertices for house");
 					// var result = ParseVertices(window.house, window.houseMtl);
@@ -1776,7 +2272,7 @@ NEXT:
 					
 					console.log("parse vertices for wooden sign");
 					var result = ParseVertices(window.woodSign, window.woodSignMtl);
-					var woodSign = GPU.CreateObject(1, CustomObj, [-1.5, -5.5, -4], [0,25,0], [1,1,1], result, window.woodSignTexture, window.woodNormals);
+					var woodSign = GPU.CreateObject(1, CustomObj, [5, -5, 10.5], [0,1.6,0], [1,1,1], result, window.woodSignTexture, window.woodNormals);
 					woodSign.specularity = 120;
 							
 					console.log("parse vertices for tree");
@@ -1791,16 +2287,7 @@ NEXT:
 					// sphereTree.SetParent(ground);
 					// sphereTree.specularity = 100;															
 					
-					//console.log("cube.id: " + cube.id);
-					
-					// tnt Object
-					//tnt needs to be made near the end of slow start so it can set explodePos on all objects
-					// console.log("parse vertices for tnt");
-					var result = ParseVertices(window.tnt, window.tntMtl);
-					var tnt = GPU.CreateObject(1, Tnt, [4, -3, 0], [0,0,0], [1,1,1], result, window.tntTexture);
-															
-					var tnt2 = GPU.CreateObject(1, Tnt, [12, -3, 0], [0,0,0], [1,1,1], result, window.tntTexture);				
-					var tnt3 = GPU.CreateObject(1, Tnt, [23, -3, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+					//console.log("cube.id: " + cube.id);										
 
 					let dummyPos = [9999, 9999, 9999];
 					InitExplodePositions(dummyPos);			
@@ -2005,9 +2492,9 @@ NEXT:
 					//type 1 = solid
 					//type 2 = trigger
 					var temp;
-					if(prefab == CustomObj || prefab == Tnt  || prefab == Crater || prefab == Boss || prefab == MovingPlatform || prefab == Grass)
+					if(prefab == CustomObj || prefab == Tnt  || prefab == Crater || prefab == Boss || prefab == MovingPlatform || prefab == Grass || prefab == Metal)
 						temp = new prefab(parserData, texture, normalMap, pos, rot, scale); //Yes this dark sorcery will work.
-					else if (prefab == Rope || prefab == SpikeGroup)
+					else if (prefab == Rope || prefab == SpikePit || prefab == SideSpikes || prefab == LowSpikes)
 						temp = new prefab(parserData, pos, rot, scale);
 					else if (prefab == Smoke)
 						temp = new prefab(pos, rot, scale, fade);
@@ -2174,10 +2661,11 @@ NEXT:
 							fadeVal: f32, //offset 172
 							isFade: u32, //offset 176
 							performancePercentage: f32, //offset 180
-							isGrass: u32, //offset 184			
+							isGrass: u32, //offset 184		
+							isFlashingRed: u32, //offset 188?	
 							
 							//KEEP THIS AT THE END OF UNIFORMS
-							explodePos: array<vec3f, 4>, //offset 192, same as GPU.explodePosInitialOffset
+							explodePos: array<vec3f, 4>, //offset 196?, same as GPU.explodePosInitialOffset
 						};						
 						@group(0) @binding(0) var<uniform> uni: Uniforms;		
 
@@ -2485,7 +2973,12 @@ NEXT:
 							if(uni.isFade == 1u)
 							{
 								return vec4f(0,0,0,uni.fadeVal);							
-							}							
+							}
+
+							if(uni.isFlashingRed == 1u)
+							{
+								return vec4f(1,0,0,1);
+							}
 
 							if(uni.isFlame == 1u)
 							{
@@ -2558,9 +3051,9 @@ NEXT:
 							var normalWS = normalize(TBN * normalTangent); //old texture example code
 
 							//there's weird errors when using fsInput.worldSpace or textureSample near dpdx, so I'm setting this variable early
-							let textureValues = textureSample(texture, textureSampler, fsInput.texCoords);																				
+							let textureValues = textureSample(texture, textureSampler, fsInput.texCoords);														
 																																																						
-							for(var i = 0u; i < 3u; i++)
+							for(var i = 0u; i < 4u; i++)
 							{							
 								// hard coded explosion radius for now, might customize later							
 								if(distance(fsInput.worldSpace, uni.explodePos[i]) < 7.92 && (uni.isGrass == 1u || uni.isCrater == 1u || uni.isRope == 1u))
@@ -2655,7 +3148,7 @@ NEXT:
 								dirLight += IL * light.color.xyz;
 							}
 								
-							//isSmoke got moved to the top of the fragment shader to return earlier for slightly better performance
+							//isSmoke got moved to the top of the fragment shader to return earlier for slightly better performance							
 							
 							var textureUse : f32;
 							textureUse = f32(uni.usingTexture);
