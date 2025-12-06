@@ -1,7 +1,7 @@
 from PIL import Image
 import numpy as np
 
-img = Image.open("metal.png").convert("RGBA")
+img = Image.open("tntPack.png").convert("RGBA")
 
 data = np.array(img, dtype=np.uint8)
 

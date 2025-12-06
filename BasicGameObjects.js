@@ -114,11 +114,7 @@ class GameObject
 			if(this.vertices[i] > rightmostX)			
 				rightmostX = this.vertices[i];
 		}		
-		this.ApplySceneGraph();
-		// console.log("scale: " + this.scale);
-		// console.log("localScale: " + this.localScale);
-		//assuming uniform scale
-		//console.log("collision radius is: " + rightmostX * math.max(this.scale[0], this.localScale[0]));
+		this.ApplySceneGraph();		
 		return rightmostX * this.scale[0];
 	}
 
@@ -136,8 +132,8 @@ class GameObject
 		GPU.device.queue.writeBuffer(this.uniformBuffer, 64, new Float32Array(this.rot));
 
 		if(this.timer != undefined)
-			GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));		
-		
+			GPU.device.queue.writeBuffer(this.uniformBuffer, 120, new Float32Array([this.timer]));				
+
 		GPU.device.queue.writeBuffer(this.uniformBuffer, 80, new Float32Array(this.Ka));
 		GPU.device.queue.writeBuffer(this.uniformBuffer, 96, new Float32Array(this.Ks));						
 		GPU.device.queue.writeBuffer(this.uniformBuffer, 108, new Float32Array([this.specularity]));
@@ -520,7 +516,9 @@ class GameObject
 
 					clearX = false;					
 					clearZ = false;
-					GPU.Solid[so].OnObjectStay(this);					
+					GPU.Solid[so].OnObjectStay(this);
+					
+					//console.log("tnt x collision with " + so);
 				}
 
 				if(this.CheckCollision(this, newZ, GPU.Solid[so], GPU.Solid[so].pos))
@@ -530,6 +528,8 @@ class GameObject
 					clearZ = false;					
 					clearX = false;
 					GPU.Solid[so].OnObjectStay(this);
+
+					//console.log("tnt z collision with " + so);
 				}
 
 				if(this.CheckCollision(this, newY, GPU.Solid[so], GPU.Solid[so].pos))
@@ -540,21 +540,32 @@ class GameObject
 					this.grounded = true;
 					this.vel[1] = 0;
 					GPU.Solid[so].OnObjectStay(this);
+
+					//console.log("tnt y collision with " + so);
 				}
-			}
+			}			
 						
 			//check each dimension separately to allow sliding on certain dimension
-			if(clearX)			
+			if(clearX)		
+				{
+					//console.log("moving tnt x");	
 				this.localPos[0] = newX[0];
+				}
 			if(clearY)
+			{
+				//console.log("moving tnt y");	
 				this.localPos[1] = newY[1];					
+			}
 			if(clearZ)
+			{
+				//console.log("moving tnt x");	
 				this.localPos[2] = newZ[2];
+			}
 			//this.pos = this.localPos;
 		}
 		//object moving is a trigger
 		else
-		{	
+		{			
 			this.localPos[0] += this.vel[0];			
 			this.localPos[1] += this.vel[1];						
 			this.localPos[2] += this.vel[2];
@@ -739,6 +750,14 @@ class GameObject
 		var xScale = math.hypot(this.worldMatrix[0][0], this.worldMatrix[1][0], this.worldMatrix[2][0]);
 		var yScale = math.hypot(this.worldMatrix[0][1], this.worldMatrix[1][1], this.worldMatrix[2][1]);
 		var zScale = math.hypot(this.worldMatrix[0][2], this.worldMatrix[1][2], this.worldMatrix[2][2]);
+		//worst case if scale messes up, use uniform-ish scale
+		// if(math.isNaN(xScale))
+		// 	xScale = zScale;
+		// if(math.isNaN(yScale))
+		// 	yScale = zScale;
+		// if(math.isNaN(zScale))
+		// 	zScale = xScale;
+		
 		this.scale = [ xScale, yScale, zScale ];
 	}
 
@@ -900,7 +919,7 @@ class Light extends GameObject
 		this.pos[3] = 1;
 		this.color = [1, 0.5, 0.5, 1];
 		this.specularity = 50.0;
-		this.ambientLight = 0.65;
+		this.ambientLight = 0.05;
 
 		this.spinCenter = [0,0,0];
 				
@@ -911,7 +930,7 @@ class Light extends GameObject
 			entries: 
 			[				
 				{ binding: 0, resource: { buffer: GPU.dummyUniformBuffer}},
-				{ binding: 1, resource: { buffer: GPU.lightBuffer}},					
+				{ binding: 1, resource: { buffer: GPU.lightBuffer}},		
 			],
 		});
 

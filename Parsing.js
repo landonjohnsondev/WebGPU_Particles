@@ -84,18 +84,19 @@ function ParseVertices(fileContent, materialContent)
 
         else if(line.split(' ')[0] == "Kd")
             KdVals[lastMatName] = line.substring(3).split(' ');
-        else if(line.split(' ')[0] == "Ka")
-            KaVals[lastMatName] = line.substring(3).split(' ');
+        else if(line.split(' ')[0] == "Ka")        
+            KaVals[lastMatName] = line.substring(3).split(' ');        
         else if(line.split(' ')[0] == "Ks")
             KsVals[lastMatName] = line.substring(3).split(' ');
         else if(line.split(' ')[0] == "Ns")
             shinyVals[lastMatName] = line.substring(3);
-
+        
         // else if(line.split(' ')[0] == "map_Kd")
         // {
         //     texture = 
         // }
     }
+    //console.log("Ka vals: " + KaVals);
 
     for(const line of fileContent.split("\n"))
     {										
@@ -172,18 +173,21 @@ function ParseVertices(fileContent, materialContent)
                 }
 
                 vertice.push(normal[0], normal[1], normal[2]);
-                
-                if(Object.keys(KaVals).length != 0)
-                {
+                            
+                if(Object.keys(KaVals).length > 0 && KaVals[curMat] != undefined)
+                {                                        
                     vertice.push(KaVals[curMat][0], KaVals[curMat][1], KaVals[curMat][2]);
                     vertice.push(KsVals[curMat][0], KsVals[curMat][1], KsVals[curMat][2]);
                     vertice.push(shinyVals[curMat]);
                 }
                 else
                 {
-                    vertice.push(0,0,0);
-                    vertice.push(0,0,0);
-                    vertice.push(0);
+                    KaVals[lastMatName] = [1,1,1];
+                    KsVals[lastMatName] = [1,1,1];
+                    shinyVals[lastMatName] = 1;
+                    vertice.push(1,1,1);
+                    vertice.push(1,1,1);
+                    vertice.push(1);
                 }               
 
                 for(const flt of vertice)
