@@ -460,7 +460,7 @@ Extra:
 					this.grounded = false;
 					this.jumpStrength = 0.4;
 
-					//this.respawnPos = pos;
+					this.respawnPos = [ this.localPos[0], this.localPos[1], this.localPos[2] ];
 					this.hp = 3;
 
 					this.stickDeadzone = 0.05;
@@ -571,6 +571,16 @@ Extra:
 					//reset x and z vel every frame, but retain gravity					
 					//while launching, cap x and z speed to max(launch speed, movement speed)
 
+					if(GPU.CheckKey('R'))
+					{
+						GPU.GetObjectOfType(Fade).fadeState = "fadeOut";
+						GPU.GetObjectOfType(Fade).isFirstFade = true;
+						//if(GPU.GetObjectOfType(Fade).level == 2)
+						ClearExplosions();
+						// console.log("respawn pos");
+						// this.localPos = [ this.respawnPos[0], this.respawnPos[1], this.respawnPos[2] ];
+					}
+
 					this.vel[1] += (1/60) * -0.8;					
 					if(this.launchVec == undefined)
 					{
@@ -618,7 +628,7 @@ Extra:
 						newVel[2] -= this.transform.forward[2] * this.moveSpeed * moveIntensity;
 
 						if(this.launchVec == undefined || math.hypot(newVel) < math.hypot(this.vel))													
-							this.vel = [ newVel[0], newVel[1], newVel[2] ];						
+							this.vel = [ newVel[0], newVel[1], newVel[2] ];		
 					}					
 
 					//STRAFE CONTROLS
@@ -1714,7 +1724,7 @@ Extra:
 						{
 							// Player presses 'E' to light fire
 							//Use optional chaining to exit if controller is null
-							if(GPU.CheckKey('E') || GPU.controller?.buttons[0].pressed) 
+							if(GPU.CheckKey('E') || GPU.controller?.buttons[1].pressed) 
 							{
 								document.getElementById("tntSizzle").play();
 								this.litFire = 1;
@@ -2347,7 +2357,7 @@ Extra:
 					var room2FurtherWall = this.CreateObject(1, CustomObj, [-6, 10, 51], [0,0,0], [25,20,5], result, window.metalTexture);
 					var room2CloseWall = this.CreateObject(1, CustomObj, [-39, 10, 35], [0,0,0], [2,20,20], result, window.metalTexture);
 
-					var secondJumpFloor = this.CreateObject(1, Grass, [12, -25, 43], [0,0,0], [20,20,10], result, window.grassTexture);
+					var secondJumpFloor = this.CreateObject(1, Grass, [12, -25, 44], [0,0,0], [20,20,10], result, window.grassTexture);
 					
 					var result = ParseVertices(window.woodSign, window.woodSignMtl);
 					var woodSign = GPU.CreateObject(1, CustomObj, [6, -5, 44], [0,2.4,0], [1,1,1], result, window.woodSignTexture, window.woodNormals);
@@ -2474,9 +2484,9 @@ Extra:
 						// var spotlight = GPU.CreateObject(1, CustomObj, [i*2, 2, 1.5], [0,0,0], [0.5,0.5,0.5], result);
 					}										
 										
-					var result = ParseVertices(window.woodSign, window.woodSignMtl);
-					var woodSign = GPU.CreateObject(1, CustomObj, [5, -5, 9], [0,1.6,0], [1,1,1], result, window.woodSignTexture, window.woodNormals);
-					woodSign.specularity = 120;																					
+					// var result = ParseVertices(window.woodSign, window.woodSignMtl);
+					// var woodSign = GPU.CreateObject(1, CustomObj, [5, -5, 9], [0,1.6,0], [1,1,1], result, window.woodSignTexture, window.woodNormals);
+					// woodSign.specularity = 120;																					
 										
 					let dummyPos = [9999, 9999, 9999];
 					InitExplodePositions(dummyPos);													
