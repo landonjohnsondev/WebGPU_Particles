@@ -20,11 +20,15 @@ Extra:
 			<canvas id="myCanvas" style="display: block; width: 100%; height: 100%;" width="1500" height="750"></canvas>
 			<h1 id="title">Explosive Maneuvers</h1>
 			
-			<button id="start" style="top: 40%;" onclick="GPU.HideTitleScreen(); GPU.StartGame()">
+			<button id="start" style="top: 40%;" onclick="GPU.HideTitleScreen(); GPU.StartGame(1)">
 				<h1 id="startText">Start Game</h1>
 			</button>
+			
+			<button id="debug" style="top: 50%;" onclick="GPU.HideTitleScreen(); GPU.StartGame(0)">
+				<h1 id="debugText">Start Debug</h1>
+			</button>
 
-			<button id="credits" style="top: 50%;" onclick="GPU.HideTitleScreen(); GPU.ShowCredits()">
+			<button id="credits" style="top: 60%;" onclick="GPU.HideTitleScreen(); GPU.ShowCredits()">
 				<h1 id="creditsText">Credits</h1>
 			</button>
 
@@ -2072,8 +2076,13 @@ Extra:
 						
 						if(this.isFirstFade)
 						{
-							GPU.DestroyAllObjects();							
-							if(this.level == 1)		
+							GPU.DestroyAllObjects();
+							
+							if (this.level == 0)
+							{
+								GPU.LoadDebug();
+							}
+							else if(this.level == 1)		
 							{					
 								GPU.LoadLevel1();								
 							}
@@ -2221,7 +2230,7 @@ Extra:
 					middleTnt.isTitleTnt = true;
 				}
 
-				StartGame()
+				StartGame(levelOrDebug)
 				{
 					console.log("starting game...");
 					this.HideTitleScreen();
@@ -2231,10 +2240,18 @@ Extra:
 					this.fadeTitleMusic = true;					
 
 					GPU.GetObjectOfType(Fade).fadeState = "fadeOut";
-					GPU.GetObjectOfType(Fade).level = 1;
+					if (levelOrDebug == 0)
+					{
+						GPU.GetObjectOfType(Fade).level = 0;
+					}
+					else
+					{
+						GPU.GetObjectOfType(Fade).level = 1;
+					}
+					
 					GPU.GetObjectOfType(Fade).isFirstFade = true;
 				}
-
+				
 				ShowHearts()
 				{
 					document.getElementById("heart1").style.visibility = "visible";
@@ -2275,6 +2292,9 @@ Extra:
 
 					document.getElementById("startText").style.visibility = "visible";
 					document.getElementById("start").style.visibility = "visible";
+					
+					document.getElementById("debugText").style.visibility = "visible";
+					document.getElementById("debug").style.visibility = "visible";
 
 					document.getElementById("credits").style.visibility = "visible";
 					document.getElementById("creditsText").style.visibility = "visible";
@@ -2306,6 +2326,9 @@ Extra:
 					
 					document.getElementById("start").style.visibility = "hidden";
 					document.getElementById("startText").style.visibility = "hidden";
+					
+					document.getElementById("debugText").style.visibility = "hidden";
+					document.getElementById("debug").style.visibility = "hidden";
 
 					document.getElementById("credits").style.visibility = "hidden";						
 					document.getElementById("creditsText").style.visibility = "hidden";	
@@ -2317,6 +2340,97 @@ Extra:
 					this.gameWon = false;
 					this.explodePos = [];
 					//reset cam pos
+				}
+
+				async LoadDebug()
+				{
+					this.HideTitleScreen();
+
+					this.fadeTitleMusic = true;
+
+					GPU.GetObjectOfType(Fade).isFirstFade = true;					
+
+					this.camera.pos = [4,-1,-5];
+
+					var pointLight;
+					for(let i = 0; i < 5; i++)
+					{									
+						console.log("creating point light...");
+						pointLight = this.CreateObject(0, PointLight, [0+i*8,2, 0], [0,0,0]);
+						pointLight.color = [0.1, 0.1, 0.1];
+
+						// var flame = this.CreateObject(0, Flame, [0,0,0], [0,0,0]);
+						// flame.SetParent(pointLight);
+						
+						// var result = ParseVertices(window.discoBall, window.discoBallMtl);
+						// var discoBall = GPU.CreateObject(1, CustomObj, [0.0, 0, 0], [0,1.5,0], [1,1,1], result);
+					}
+
+					for(let i = 0; i < 3; i++)
+					{
+						console.log("creating spotlight...");
+						var light = this.CreateObject(0, SpotLight, [-5+(i*6),-1.2,0], [0.5,0,0]);
+						light.color = [i/3, 0, 0.5];
+												
+						// var result = ParseVertices(window.spotlight, window.spotlightMtl);
+						// var spotlight = GPU.CreateObject(1, CustomObj, [i*2, 2, 1.5], [0,0,0], [0.5,0.5,0.5], result);
+					}		
+					var l = this.CreateObject(0, DirectionalLight, [5, 5.0, 0], [0,3,0]);
+					l.color = [0.15,0.15,0.15];
+
+					console.log("parse vertices for ground");
+					var result = ParseVertices(window.ground, window.groundMtl);
+					var ground = GPU.CreateObject(1, CustomObj, [0,-5.5,1.1], [0,0,0], [15,15,15], result, window.grassTexture, window.grassNormals);					
+					ground.specularity = 105;
+
+					console.log("parse vertices for house");
+					var result = ParseVertices(window.house, window.houseMtl);
+					var house = GPU.CreateObject(1, CustomObj, [0.2,0.2,0.2], [0,0,0], [1,1,1], result, window.woodTexture, window.woodNormals);
+					house.SetParent(ground);
+					house.specularity = 100;
+					
+					console.log("parse vertices for wooden sign");
+					var result = ParseVertices(window.woodSign, window.woodSignMtl);
+					var woodSign = GPU.CreateObject(1, CustomObj, [-1.5, -5.5, -4], [0,25,0], [1,1,1], result, window.woodSignTexture, window.woodNormals);
+					woodSign.specularity = 120;
+							
+					console.log("parse vertices for tree");
+					var result = ParseVertices(window.tree, window.treeMtl);
+					var tree = GPU.CreateObject(1, CustomObj, [0.8,0.25,0], [0,0,0], [1,1,1], result, window.treeTexture, window.treeNormals);
+					tree.SetParent(ground);
+					tree.specularity = 100;
+
+					console.log("parse vertices for sphereTree");
+					var result = ParseVertices(window.sphereTree, window.sphereTreeMtl);
+					var sphereTree = GPU.CreateObject(1, CustomObj, [-0.3, 0.19, -0.4], [0,0,0], [0.2,0.2,0.2], result, window.treeTexture, window.treeNormals);					
+					sphereTree.SetParent(ground);
+					sphereTree.specularity = 100;
+										
+					console.log("parse vertices for sun");	
+					var result = ParseVertices(window.sun, window.sunMtl);
+					var sun = GPU.CreateObject(1, CustomObj, [0.9, 1, 1], [0,0,0], [1,1,1], result);
+					sun.specularity = 100;					
+
+					console.log("parse vertices for cube");
+					var result = ParseVertices(window.cube, window.cubeMtl);
+					var cube = GPU.CreateObject(1, CustomObj, [0.0, -2, 3], [0,0,0], [1,1,1], result, window.spiralTexture, window.spiralNormals);
+					cube.specularity = 100;						
+					
+					// tnt Object
+					//tnt needs to be made near the end of slow start so it can set explodePos on all objects
+					// console.log("parse vertices for tnt");
+					var result = ParseVertices(window.tnt, window.tntMtl);
+					var tnt = GPU.CreateObject(1, Tnt, [4, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+															
+					var tnt2 = GPU.CreateObject(1, Tnt, [12, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);					
+					var tnt3 = GPU.CreateObject(1, Tnt, [23, -4, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+
+					let dummyPos = [9999, 9999, 9999];
+					InitExplodePositions(dummyPos);
+					InitCollision();
+
+					this.startTime = performance.now();
+					this.loops = 0;
 				}
 
 				async LoadLevel1()
