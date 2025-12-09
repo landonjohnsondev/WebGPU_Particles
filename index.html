@@ -313,7 +313,10 @@ Extra:
 					}
 
 					this.isTrigger = false;
-										
+					//set isGrass to true to allow blowing up anything like we had before
+					if(GPU.isDebug && !(this instanceof Tnt))
+						GPU.device.queue.writeBuffer(this.uniformBuffer, 184, new Uint32Array([1]));
+					
 					this.vertexBuffer = GPU.device.createBuffer({
 						label: "verticeBuffer",
 						size: this.vertices.byteLength,
@@ -1369,7 +1372,6 @@ Extra:
 					super(parserData, rawTexture, normalMap, pos, rot, scale);
 					//set isGrass to true
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 184, new Uint32Array([1]));
-
 				}
 
 				Update()
@@ -1844,15 +1846,17 @@ Extra:
 				}				
 
 				Explode()
-				{
-					//commented to improve performance just for the expo
-					// var smoke1 = GPU.CreateObject(
-					// 			2, 
-					// 			Smoke, 
-					// 			[this.pos[0], this.pos[1]+5, this.pos[2]],
-					// 			[0,0,0],
-					// 			[10, 10, 10], 
-					// 			0, 0, 0, 1);
+				{					
+					if(GPU.isDebug)
+					{
+					var smoke1 = GPU.CreateObject(
+								2, 
+								Smoke, 
+								[this.pos[0], this.pos[1]+5, this.pos[2]],
+								[0,0,0],
+								[10, 10, 10], 
+								0, 0, 0, 1);
+					}
 
 					// Spawns 3 flames for now
 					for(let i = 0; i < 3; i++)
@@ -1875,7 +1879,8 @@ Extra:
 						SetExplodePos(this.pos, this.tntIdx);
 
 					//this could mess up explosion if the creeper tnt is recreated
-					this.LaunchObjects();
+					if(!GPU.isDebug)
+						this.LaunchObjects();
 					document.getElementById("boom").play();
 
 					if(this.isCreeperTnt)
@@ -2380,6 +2385,8 @@ Extra:
 
 				async LoadDebug()
 				{					
+					GPU.isDebug = true;
+
 					this.fadeTitleMusic = true;
 					GPU.GetObjectOfType(Fade).isFirstFade = true;
 
@@ -2413,15 +2420,14 @@ Extra:
 					l.color = [0.15,0.15,0.15];
 
 					console.log("parse vertices for ground");
-					var result = ParseVertices(window.ground, window.groundMtl);
-					var ground = GPU.CreateObject(1, CustomObj, [0,-5.5,1.1], [0,0,0], [15,15,15], result, window.grassTexture, window.grassNormals);					
+					var result = ParseVertices(window.cube, window.cubeMtl);
+					var ground = GPU.CreateObject(1, Grass, [10,-20,1.1], [0,0,0], [15,15,15], result, window.grassTexture, window.grassNormals);					
 					ground.specularity = 105;
 
 					console.log("parse vertices for house");
 					var result = ParseVertices(window.house, window.houseMtl);
-					var house = GPU.CreateObject(1, CustomObj, [0.2,0.2,0.2], [0,0,0], [1,1,1], result, window.woodTexture, window.woodNormals);
-					house.SetParent(ground);
-					house.specularity = 100;
+					var house = GPU.CreateObject(1, CustomObj, [13,-2,4], [0,0,0], [15,15,15], result, window.woodTexture, window.woodNormals);					
+					house.specularity = 100;					
 					
 					console.log("parse vertices for wooden sign");
 					var result = ParseVertices(window.woodSign, window.woodSignMtl);
@@ -2440,14 +2446,14 @@ Extra:
 					sphereTree.SetParent(ground);
 					sphereTree.specularity = 100;
 										
-					console.log("parse vertices for sun");	
-					var result = ParseVertices(window.sun, window.sunMtl);
-					var sun = GPU.CreateObject(1, CustomObj, [0.9, 1, 1], [0,0,0], [1,1,1], result);
-					sun.specularity = 100;					
+					// console.log("parse vertices for sun");	
+					// var result = ParseVertices(window.sun, window.sunMtl);
+					// var sun = GPU.CreateObject(1, CustomObj, [0.9, 1, 1], [0,0,0], [1,1,1], result);
+					// sun.specularity = 100;					
 
 					console.log("parse vertices for cube");
 					var result = ParseVertices(window.cube, window.cubeMtl);
-					var cube = GPU.CreateObject(1, CustomObj, [0.0, -2, 3], [0,0,0], [1,1,1], result, window.spiralTexture, window.spiralNormals);
+					var cube = GPU.CreateObject(1, CustomObj, [5, -2, 7], [0,0,0], [1,1,1], result, window.spiralTexture, window.spiralNormals);
 					cube.specularity = 100;						
 					
 					// tnt Object
