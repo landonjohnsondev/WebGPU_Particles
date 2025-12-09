@@ -553,8 +553,8 @@ class GameObject
 				}
 			if(clearY)
 			{
-				//console.log("moving tnt y");	
-				this.localPos[1] = newY[1];					
+				//console.log("moving tnt y");
+				this.localPos[1] = newY[1];
 			}
 			if(clearZ)
 			{
@@ -575,8 +575,8 @@ class GameObject
 				if(GPU.Trigger[tr] == this)
 					continue;
 
-				//if(this.CheckCollision(this, this.localPos, GPU.Trigger[tr], GPU.Trigger[tr].pos))
-					//console.log("TRIGGER ENTERED ANOTHER TRIGGER");
+				// if(this.CheckCollision(this, this.localPos, GPU.Trigger[tr], GPU.Trigger[tr].pos))
+				// 	GPU.Trigger[tr].OnTriggerStay(this);
 			}			
 		}
 
@@ -633,7 +633,7 @@ class GameObject
 			xzDistToCrater = math.min(xzDistToCrater, 8);			
 
 			adjustedY[1] = this.closestCraterPos[1] - math.sqrt(64 - xzDistToCrater**2);			
-			adjustedY[1] += 1*this.sideLength;			
+			adjustedY[1] += 1*this.heightSide;			
 									
 			this.localPos = [ adjustedY[0], adjustedY[1], adjustedY[2] ];
 			//KEEP IN MIND THIS MEANS YOU NEVER COLLIDE WITH OTHER OBJECTS WHILE IN THE CRATER
@@ -919,7 +919,7 @@ class Light extends GameObject
 		this.pos[3] = 1;
 		this.color = [1, 0.5, 0.5, 1];
 		this.specularity = 50.0;
-		this.ambientLight = 0.05;
+		this.ambientLight = 0.02;
 
 		this.spinCenter = [0,0,0];
 				

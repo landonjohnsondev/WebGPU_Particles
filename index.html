@@ -1,9 +1,7 @@
 <!--
 Extra:
 • Level 1
-• Replay makes strafe go into sky?
 • Delta time system?
-• Move with grass blocks?
 • Take damage red flash?
 -->
 
@@ -92,6 +90,7 @@ Extra:
 			var performancePercentage = 1.0;
 			
 			var startedMusic = false;
+			var explosionsEnabled = true;
 		
 			function FrameUpdate()
 			{				
@@ -138,6 +137,9 @@ Extra:
 			//then write the crater's new explode pos to all objects
 			function SetExplodePos(pos, idx)
 			{					
+				if(!explosionsEnabled)
+					return;
+
 				pos.push(1); //make pos a vec4f to ensure it is 16 bytes long
 				console.log("parse for sphere");
 				var result = ParseVertices(window.sphere, window.sphereMtl);
@@ -449,14 +451,14 @@ Extra:
 					this.isTrigger = false;
 					//this.collisionRadius = 5;
 
-					this.camRadius = 0.5;
-					this.sideLength = 1.5;
-					this.leftX = -this.camRadius;
-					this.rightX = this.camRadius;
-					this.bottomY = -this.sideLength;
-					this.topY = this.sideLength;
-					this.nearZ = -this.camRadius;
-					this.farZ = this.camRadius;
+					this.sideLength = 1.7;
+					this.heightSide = 2.3;
+					this.leftX = -this.sideLength;
+					this.rightX = this.sideLength;
+					this.bottomY = -this.heightSide;
+					this.topY = this.heightSide;
+					this.nearZ = -this.sideLength;
+					this.farZ = this.sideLength;
 
 					//set isLaunchable to true
 					GPU.device.queue.writeBuffer(this.uniformBuffer, 160, new Uint32Array([1]));
@@ -543,7 +545,7 @@ Extra:
 
 				Update()
 				{					
-					if(!GPU.gameLoaded || GPU.gameWon)																
+					if(!GPU.gameLoaded || GPU.gameWon)
 						return;					
 
 					//dumb code to load boss level
@@ -597,14 +599,16 @@ Extra:
 						this.vel[0] = this.vel[0];
 						this.vel[1] = this.vel[1];
 						this.vel[2] = this.vel[2];						
-					}					
+					}
+					
+					this.angVel = [0,0,0];
 
 					//if a stick is being held
 					var rotIntensity = (math.abs(leftX) > this.stickDeadzone) ? math.abs(leftX) : 1.0;
 					if(GPU.CheckKey('D') || this.LeftStickX() > this.stickDeadzone || this.RightDpadHeld())
-						this.rot[1] += this.rotSpeed * rotIntensity;
+						this.angVel[1] += this.rotSpeed * rotIntensity;
 					if(GPU.CheckKey('A') || this.LeftStickX() < -this.stickDeadzone || this.LeftDpadHeld())
-						this.rot[1] -= this.rotSpeed * rotIntensity;					
+						this.angVel[1] -= this.rotSpeed * rotIntensity;					
 
 					if( (GPU.CheckKey(' ') || this.AHeld()) && this.grounded)
 					{
@@ -673,7 +677,7 @@ Extra:
 
 					//falling into crater, 6.5 is kinda hardcoded based on camRadius so you don't fall over and over
 					if(this.closestCraterPos != undefined && 
-						this.VectorDistance(this.pos, this.closestCraterPos) < 6.5)
+						this.VectorDistance(this.pos, this.closestCraterPos) < 5.7)
 					{						
 						ignoreCollision = true;
 					}
@@ -681,9 +685,9 @@ Extra:
 					else if(this.closestCraterPos != undefined && 
 						this.pos[1] < this.closestCraterPos[1] &&
 						this.vel[1] < 0.4 &&
-						this.Between( this.VectorDistance(this.pos, this.closestCraterPos), 6.5, 8.5 ) )
+						this.Between( this.VectorDistance(this.pos, this.closestCraterPos), 5.7, 8.5 ) )
 					{						
-						standingOnCrater = true;					
+						standingOnCrater = true;
 					}
 					//exiting crater
 					else if( this.closestCraterPos != undefined && 
@@ -694,32 +698,28 @@ Extra:
 						
 						ignoreCollision = true;			
 						//hard-coded fix for moving above crater						
-						this.localPos[1] = this.closestCraterPos[1] + this.sideLength + 0.01;
+						this.localPos[1] = this.closestCraterPos[1] + this.heightSide + 0.01;
 					}										
 					
+					if(this.isFrozen)
+					{
+						this.vel[0] = 0;
+						this.vel[2] = 0;
+						this.angVel = [0,0,0];
+					}
 					var collision = this.MoveAndSlide(ignoreCollision, standingOnCrater);
-					// if(collision instanceof CustomObj && collision.TopY() < this.BottomY())
-					// {
-					// 	this.launchStopOn = true;
-					// 	this.launchStopTimer = 0.0;
-					// }
 
-					// if(this.launchStopOn)
-					// {
-					// 	this.launchStopTimer += (1/60);
-					// 	if(this.launchStopTimer > this.launchStopTime)
-					// 	{
-					// 		console.log("remove launch vec");
-					// 		this.launchVec = undefined;
-					// 		this.launchStopTimer = 0.0;
-					// 		this.launchStopOn = false;
-					// 	}
-					// 	console.log("launchStopTimer: " + this.launchStopTimer);
-					// }
 					//zero explosion speed once camera hits a solid
 					//don't let collisions below stop launch speed
 					if( collision != undefined || standingOnCrater) // && collision.TopY() > this.BottomY())
 						this.launchVec = undefined;
+
+					if(collision instanceof MovingPlatform)
+					{
+						this.localPos[0] += collision.vel[0];
+						this.localPos[1] += collision.vel[1];
+						this.localPos[2] += collision.vel[2];
+					}
 				}
 
 				ClosestCraterPos()
@@ -1141,7 +1141,11 @@ Extra:
 					var respawnPos = obj.respawnPos;					
 					console.log("death zone hit cam");
 					if(obj instanceof Camera)
+					{	
 						obj.localPos = [ respawnPos[0], respawnPos[1], respawnPos[2] ];
+						obj.vel = [0,0,0];
+						obj.launchVec = undefined;
+					}
 				}
 
 				Render(commandPass)
@@ -1208,6 +1212,7 @@ Extra:
 
 					var result = ParseVertices(window.cube, window.cubeMtl);
 					var metal = GPU.CreateObject(2, Metal, [5, this.BottomY()-0.99, this.pos[2] + 25], [0,0,0], [25,1,25], result, window.metalTexture);
+					ClearExplosions();
 					metal.finishedMetalAttack = false;					
 					metal.RestockTnt();
 					//make metal fast enough for player to not get back to a crater
@@ -1234,8 +1239,8 @@ Extra:
 				//shoot two platforms that move outward each time
 				ShootPlatforms()
 				{					
-					var pos1 = [ this.pos[0] + (this.rightX/3) + this.curPlatform * 2, this.BottomY() + 3 + 2.8 * this.curPlatform, this.pos[2] - 9 ];
-					var pos2 = [ this.pos[0] - (this.rightX/3) + this.curPlatform * -2, this.BottomY() + 3 + 2.8 * this.curPlatform, this.pos[2] - 9 ];
+					var pos1 = [ this.pos[0] + (this.rightX) + this.curPlatform * 2, this.BottomY() + 3 + 2.8 * this.curPlatform, this.pos[2] - 9 ];
+					var pos2 = [ this.pos[0] - (this.rightX) + this.curPlatform * -2, this.BottomY() + 3 + 2.8 * this.curPlatform, this.pos[2] - 9 ];
 					var result = ParseVertices(window.cube, window.cubeMtl);
 
 					var leftPlatform = GPU.CreateObject(1, MovingPlatform, pos1, [0,0,0], [2,1,2], result, window.grassTexture);
@@ -1389,8 +1394,15 @@ Extra:
 				{
 					this.ApplySceneGraph();
 					var objHit = this.Move();
-					if(objHit != undefined)					
-						GPU.DestroyObject(this.id);					
+					if(objHit != undefined && !(objHit instanceof Camera))
+						GPU.DestroyObject(this.id);
+					else if(objHit instanceof Camera)
+					{
+						//this continues to move the block when it hits the camera but can push the camera out of bounds
+						// this.localPos[0] += this.vel[0];		
+						// this.localPos[1] += this.vel[1];
+						// this.localPos[2] += this.vel[2];
+					}
 				}
 
 				Render(commandPass)
@@ -1459,6 +1471,9 @@ Extra:
 					if(obj instanceof Camera)
 					{
 						document.getElementById("hitSpikes").play();
+						obj.vel = [0,0,0];
+						obj.rot = [0,0,0];
+						obj.launchVec = undefined;
 						//reset camera and take damage				
 						if(obj.hp > 0)
 						{
@@ -1466,7 +1481,19 @@ Extra:
 							obj.TakeDamage(1);														
 						}								
 					}
+					// else if(obj instanceof SideSpikes)
+					// {
+					// 	console.log("HIDE SIDE SPIKES");
+					// }
 				}
+
+				// OnTriggerStay(obj)
+				// {
+				// 	if(obj instanceof SideSpikes)
+				// 	{
+				// 		GPU.DestroyObject(this.id);
+				// 	}
+				// }
 
 				Render(commandPass)
 				{
@@ -1506,6 +1533,9 @@ Extra:
 				{
 					if(obj instanceof Camera)
 					{
+						obj.vel = [0,0,0];
+						obj.rot = [0,0,0];
+						obj.launchVec = undefined;
 						document.getElementById("hitSpikes").play();
 						//reset camera and take damage						
 						if(obj.hp > 0)
@@ -1570,8 +1600,7 @@ Extra:
 					}			
 					//once metal fully covers ground, clear all explode positions 
 					else if(this.NearZ() < -24)
-					{											
-						ClearExplosions();
+					{						
 						if(!this.startedAttack)
 						{
 							this.LowSpikeAttack();
@@ -1579,6 +1608,7 @@ Extra:
 						}
 						//disable isGrass, reenable later
 						GPU.device.queue.writeBuffer(this.grass.uniformBuffer, 184, new Uint32Array([0]));
+						explosionsEnabled = false;
 
 						this.vel = [0,0,0];
 					}
@@ -1595,6 +1625,7 @@ Extra:
 					{						
 						//reenable isGrass to allow exploding
 						GPU.device.queue.writeBuffer(this.grass.uniformBuffer, 184, new Uint32Array([1]));
+						explosionsEnabled = true;
 						GPU.DestroyObject(this.id);
 					}
 
@@ -1849,8 +1880,8 @@ Extra:
 
 					if(this.isCreeperTnt)
 					{
-						var result = ParseVertices(window.tntPack, window.tntPackMtl);
-						var tnt = GPU.CreateObject(1, Tnt, this.spawnPos, [0,0,0], this.spawnScale, result, window.tntPackTexture);
+						var result = ParseVertices(window.tnt, window.tntMtl);
+						var tnt = GPU.CreateObject(1, Tnt, this.spawnPos, [0,0,0], this.spawnScale, result, window.tntTexture);
 						tnt.isCreeperTnt = true;
 						GPU.DestroyObject(this.id);
 					}				
@@ -1892,7 +1923,7 @@ Extra:
 						if(obj instanceof Boss && this.isCreeperTnt)													
 							obj.TakeDamage(1);
 
-						if(distToObj > 8)
+						if(distToObj > 9)
 							continue;
 
 						var dirToObj = [];
@@ -1938,10 +1969,10 @@ Extra:
 
 					if(this.isTitleTnt && this.pos[1] < -8)
 					{
-						var result = ParseVertices(window.tntPack, window.tntPackMtl);
+						var result = ParseVertices(window.tnt, window.tntMtl);
 						var moveRangeX = 3;
 						var moveRangeY = 6;						
-						var tnt = GPU.CreateObject(1, Tnt, [ this.titlePos[0] + (math.random() * moveRangeX - moveRangeX), this.titlePos[1] + (math.random() * moveRangeY - moveRangeY), this.titlePos[2] ], [0,0,0], [1,1,1], result, window.tntPackTexture);
+						var tnt = GPU.CreateObject(1, Tnt, [ this.titlePos[0] + (math.random() * moveRangeX - moveRangeX), this.titlePos[1] + (math.random() * moveRangeY - moveRangeY), this.titlePos[2] ], [0,0,0], [1,1,1], result, window.tntTexture);
 						tnt.isTitleTnt = true;
 						tnt.titlePos = this.titlePos;
 						GPU.DestroyObject(this.directChildren[0].id);
@@ -2094,11 +2125,15 @@ Extra:
 								console.log("set ambient light");
 								GPU.LoadBoss();
 								this.level2Loaded = true;
+
+								GPU.GetObjectOfType(Camera).isFrozen = true;
 								//means player died and already had lights set
 								if(this.setLights)
 								{
+									console.log("already set lights");
 									this.LightBossLevel();
-									GPU.GetObjectOfType(Camera).localPos = [4, -3, -5];
+									GPU.GetObjectOfType(Camera).localPos = GPU.GetObjectOfType(Camera).respawnPos;
+									GPU.GetObjectOfType(Camera).isFrozen = false;
 								}
 							}
 
@@ -2116,6 +2151,7 @@ Extra:
 					{						
 						this.LightBossLevel();						
 						this.setLights = true;
+						GPU.GetObjectOfType(Camera).isFrozen = false;
 					}					
 				}
 
@@ -2212,14 +2248,14 @@ Extra:
 					var result = ParseVertices(window.cube, window.cubeMtl);
 					var movingGrass = GPU.CreateObject(1, MovingPlatform, [4,-3,2], [-math.PI/2,0,0], [30,1,15], result, window.grassTexture);					
 					
-					var tntRes = ParseVertices(window.tntPack, window.tntPackMtl);
+					var tntRes = ParseVertices(window.tnt, window.tntMtl);
 					var leftPos = [-1, 13 + math.random() * 6 - 6, -1];
 					var rightPos = [9, 13 + math.random() * 6 - 6, -1];
 					var middlePos = [4, 13 + math.random() * 6 - 6, -1];
 
-					var leftTnt = this.CreateObject(1, Tnt, leftPos, [0,0,0], [1,1,1], tntRes, window.tntPackTexture);
-					var rightTnt = this.CreateObject(1, Tnt, rightPos, [0,0,0], [1,1,1], tntRes, window.tntPackTexture);
-					var middleTnt = this.CreateObject(1, Tnt, middlePos, [0,0,0], [1,1,1], tntRes, window.tntPackTexture);
+					var leftTnt = this.CreateObject(1, Tnt, leftPos, [0,0,0], [1,1,1], tntRes, window.tntTexture);
+					var rightTnt = this.CreateObject(1, Tnt, rightPos, [0,0,0], [1,1,1], tntRes, window.tntTexture);
+					var middleTnt = this.CreateObject(1, Tnt, middlePos, [0,0,0], [1,1,1], tntRes, window.tntTexture);
 
 					leftTnt.titlePos = leftPos;
 					rightTnt.titlePos = rightPos;
@@ -2455,8 +2491,8 @@ Extra:
 					var result = ParseVertices(window.cube, window.cubeMtl);
 					var leftWall = this.CreateObject(1, CustomObj, [-10, 10, -25], [0,0,0], [2,25,50], result, window.metalTexture);
 					var rightLowWall = this.CreateObject(1, CustomObj, [20, -22, 5], [0,0,0], [1,20,20], result, window.metalTexture);	
-					var rightWall = this.CreateObject(1, CustomObj, [20, 18, 5], [0,0,0], [1,20,50], result, window.metalTexture);					
-					var nearWall = this.CreateObject(1, CustomObj, [0, 10, -15], [0,0,0], [50,25,2], result, window.metalTexture);
+					var rightWall = this.CreateObject(1, CustomObj, [20, 18, 5], [0,0,0], [0.5,20,50], result, window.metalTexture);					
+					var nearWall = this.CreateObject(1, CustomObj, [0, 11, -15], [0,0,0], [50,25,2], result, window.metalTexture);
 					var ceiling = this.CreateObject(1, CustomObj, [0, 30, -5], [0,0,0], [100,10,100], result, window.metalTexture);
 
 					var farWallLeft = this.CreateObject(1, CustomObj, [-20, 10, 25], [0,0,0], [22,25,2], result, window.metalTexture);
@@ -2475,17 +2511,17 @@ Extra:
 					var woodSign = GPU.CreateObject(1, CustomObj, [6, -5, 44], [0,2.4,0], [1,1,1], result, window.woodSignTexture, window.woodNormals);
 					woodSign.specularity = 120;
 
-					var result = ParseVertices(window.tntPack, window.tntPackMtl);
-					var tnt1 = this.CreateObject(1, Tnt, [16, 0, 42], [0,0,0], [2,2,2], result, window.tntPackTexture);
+					var result = ParseVertices(window.tnt, window.tntMtl);
+					var tnt1 = this.CreateObject(1, Tnt, [16, 0, 42], [0,0,0], [2,2,2], result, window.tntTexture);
 					
 					var result = ParseVertices(window.cube, window.cubeMtl);
 					var farWallPastTnt = this.CreateObject(1, CustomObj, [10, 5, 55], [0,0,0], [55,30,2], result, window.metalTexture);
 					//something is wrong with this wall
 					var nearWallPastTnt = this.CreateObject(1, CustomObj, [10, 5, 36], [0,0,0], [40,30,2], result, window.metalTexture);
-					var metalFloor = this.CreateObject(1, CustomObj, [55, -45, 50], [0,0,0], [25,20,20], result, window.metalTexture);
+					var metalFloor = this.CreateObject(1, CustomObj, [55, -45, 50], [0,0,0], [25,20,30], result, window.metalTexture);
 
-					var result = ParseVertices(window.tntPack, window.tntPackMtl);
-					var tnt2 = this.CreateObject(1, Tnt, [73, 6, 47], [0,0,0], [2,2,2], result, window.tntPackTexture);
+					var result = ParseVertices(window.tnt, window.tntMtl);
+					var tnt2 = this.CreateObject(1, Tnt, [73, 6, 47], [0,0,0], [2,2,2], result, window.tntTexture);
 					tnt2.useCrater = false;
 					tnt2.quickDrop = true;
 
@@ -2495,8 +2531,8 @@ Extra:
 					var cliffWallClose = this.CreateObject(1, CustomObj, [80, 5, 50], [0,0,0], [2,30,30], result, window.metalTexture);
 
 					var farWallPastCliff = this.CreateObject(1, CustomObj, [75, -10, 95], [0,0,0], [50,30,20], result, window.metalTexture);
-					var result = ParseVertices(window.tntPack, window.tntPackMtl);
-					var tnt3 = this.CreateObject(1, Tnt, [73, 3, 68], [0,0,0], [2,2,2], result, window.tntPackTexture);
+					var result = ParseVertices(window.tnt, window.tntMtl);
+					var tnt3 = this.CreateObject(1, Tnt, [73, 3, 68], [0,0,0], [2,2,2], result, window.tntTexture);
 					tnt3.useCrater = false;
 					tnt3.quickDrop = true;
 
@@ -2523,10 +2559,10 @@ Extra:
 					var farFallWall = this.CreateObject(1, CustomObj, [-2, 100, 10], [0,0,0], [20,50,2], result, window.metalTexture);
 					var nearFallWall = this.CreateObject(1, CustomObj, [-2, 100, -10], [0,0,0], [20,50,2], result, window.metalTexture);
 
-					var leftCeiling = this.CreateObject(1, CustomObj, [-34, 45, -5], [0,0,0], [25,10,50], result, window.metalTexture);
-					var rightCeiling = this.CreateObject(1, CustomObj, [47, 45, -5], [0,0,0], [25,10,50], result, window.metalTexture);
-					var farCeiling = this.CreateObject(1, CustomObj, [7, 45, 38], [0,0,0], [15,10,30], result, window.metalTexture);
-					var nearCeiling = this.CreateObject(1, CustomObj, [3, 45, -40], [0,0,0], [15,10,30], result, window.metalTexture);					
+					var leftCeiling = this.CreateObject(1, CustomObj, [-34, 50, -5], [0,0,0], [25,10,50], result, window.metalTexture);
+					var rightCeiling = this.CreateObject(1, CustomObj, [47, 50, -5], [0,0,0], [25,10,50], result, window.metalTexture);
+					var farCeiling = this.CreateObject(1, CustomObj, [7, 50, 38], [0,0,0], [15,10,30], result, window.metalTexture);
+					var nearCeiling = this.CreateObject(1, CustomObj, [3, 50, -40], [0,0,0], [15,10,30], result, window.metalTexture);					
 
 					//var walkwayPos = [-15, 18, 20];					
 
@@ -2534,11 +2570,11 @@ Extra:
 					cam.localPos = [4, 120, -5];
 					//cam.localPos = [4, -2, -5];
 					//cam.localPos = walkwayPos;
-					cam.respawnPos = [ 4, -3, -5 ];
+					cam.respawnPos = [ 4, 2, -5 ];
 					cam.rot = [0,0,0];
 					cam.hp = 3;
 									
-					var result = ParseVertices(window.funnyGolem, window.funnyGolemMtl);	
+					var result = ParseVertices(window.creeper, window.creeperMtl);
 						
 					//v coordinates for creeper texture are flipped
 					var flippedVertices = result[0];
@@ -2547,31 +2583,38 @@ Extra:
 					result[0] = flippedVertices;
 
 					//you can specify less parameters than the function defines and JS will still run it
-					var creeper = this.CreateObject(1, Boss, [5, 2, 13], [0,math.PI,0], [3.4,3.5,3.5], result, window.golemTexture);
+					var creeper = this.CreateObject(1, Boss, [5, 5, 15], [0,math.PI,0], [30,30,30], result, window.creeperTexture);
 					
 					//make spikes a trigger so the OnObjectStay camera teleport happens after the camera moves
 					var result = ParseVertices(window.spikes, window.spikesMtl);
-					var leftSpikes = this.CreateObject(2, SpikePit, [-10, -4.5, 15], [0,0,0], [1.1,1.5,1.5], result);
-					var rightSpikes = this.CreateObject(2, SpikePit, [20, -4.5, 15], [0,0,0], [1.1,1.5,1.5], result);
+					var leftSpikes = this.CreateObject(2, SpikePit, [-8, -4.5, 15], [0,0,0], [1.5,1.5,1.5], result);
+					var rightSpikes = this.CreateObject(2, SpikePit, [18.5, -4.5, 15], [0,0,0], [1.5,1.5,1.5], result);
 
-					var result = ParseVertices(window.tntPack, window.tntPackMtl);
-					var tnt = this.CreateObject(1, Tnt, [5, 25, 12], [0,0,0], [2,2,2], result, window.tntPackTexture);
+					var result = ParseVertices(window.lowSpikes, window.lowSpikesMtl);					
+					var leftTopSpikes = this.CreateObject(2, LowSpikes, [-4.5,15.5,15.5], [0,0,0], [0.8,0.8,1.1], result);
+					var rightTopSpikes = this.CreateObject(2, LowSpikes, [15,15.5,16], [0,math.PI,0], [0.8,0.8,1.2], result);
+					
+					var leftEdgeSpikes = this.CreateObject(2, LowSpikes, [-17.9,28.5,15.5], [0,0,0], [0.8,1.4,1.2], result);
+					var rightRightSpikes = this.CreateObject(2, LowSpikes, [28,28.5,15.5], [0,math.PI,0], [0.8,1.4,1.2], result);
+
+					var result = ParseVertices(window.tnt, window.tntMtl);
+					var tnt = this.CreateObject(1, Tnt, [5, 25, 15], [0,0,0], [2,2,2], result, window.tntTexture);
 					tnt.isCreeperTnt = true;										
 										
-					var result = ParseVertices(window.tntPack, window.tntPackMtl);
-					var tnt1 = GPU.CreateObject(1, Tnt, [-6, 25, 0], [0,0,0], [1,1,1], result, window.tntPackTexture);															
-					var tnt2 = GPU.CreateObject(1, Tnt, [5, 25, 0], [0,0,0], [1,1,1], result, window.tntPackTexture);
-					var tnt3 = GPU.CreateObject(1, Tnt, [16, 25, 0], [0,0,0], [1,1,1], result, window.tntPackTexture);
+					var result = ParseVertices(window.tnt, window.tntMtl);
+					var tnt1 = GPU.CreateObject(1, Tnt, [-6, 25, 0], [0,0,0], [1,1,1], result, window.tntTexture);															
+					var tnt2 = GPU.CreateObject(1, Tnt, [5, 25, 0], [0,0,0], [1,1,1], result, window.tntTexture);
+					var tnt3 = GPU.CreateObject(1, Tnt, [15, 25, 0], [0,0,0], [1,1,1], result, window.tntTexture);
 
 					var result = ParseVertices(window.cube, window.cubeMtl);
-					var leftWall = this.CreateObject(1, CustomObj, [-20, 10, 15], [0,0,0], [2,25,50], result, window.metalTexture);
-					var rightWall = this.CreateObject(1, CustomObj, [30, 10, 15], [0,0,0], [2,25,50], result, window.metalTexture);
-					var farWall = this.CreateObject(1, CustomObj, [0, 10, 25], [0,0,0], [50,25,2], result, window.metalTexture);
-					var nearWall = this.CreateObject(1, CustomObj, [0, 10, -25], [0,0,0], [50,25,2], result, window.metalTexture);					
+					var leftWall = this.CreateObject(1, CustomObj, [-20, 10, 15], [0,0,0], [2,45,50], result, window.metalTexture);
+					var rightWall = this.CreateObject(1, CustomObj, [30, 10, 15], [0,0,0], [2,35,50], result, window.metalTexture);
+					var farWall = this.CreateObject(1, CustomObj, [0, 10, 25], [0,0,0], [50,35,2], result, window.metalTexture);
+					var nearWall = this.CreateObject(1, CustomObj, [0, 10, -25], [0,0,0], [50,35,2], result, window.metalTexture);					
 
-					var leftWalkway = this.CreateObject(1, CustomObj, [-13, 13, 23], [0,0,0], [8,2,15], result, window.woodTexture);
+					var leftWalkway = this.CreateObject(1, CustomObj, [-13, 13, 23], [0,0,0], [8,1.5,15], result, window.woodTexture);
 					var leftWalkwayLip = this.CreateObject(1, CustomObj, [-7, 16, 23], [0,0,0], [2,3,14], result, window.woodTexture);
-					var rightWalkway = this.CreateObject(1, CustomObj, [23, 13, 23], [0,0,0], [8,2,15], result, window.woodTexture);
+					var rightWalkway = this.CreateObject(1, CustomObj, [23, 13, 23], [0,0,0], [8,1.5,15], result, window.woodTexture);
 					var rightWalkwayLip = this.CreateObject(1, CustomObj, [17, 16, 23], [0,0,0], [2,3,14], result, window.woodTexture);
 
 					var pointLight;
@@ -3673,7 +3716,9 @@ Extra:
 					});
 					this.depthTextureView = this.depthTexture.createView();
 
-					this.ShowTitleScreen();					
+					this.ShowTitleScreen();
+					document.getElementById("bossMusic").pause();
+					document.getElementById("levelMusic").pause();
 				}
 			}							
 			
