@@ -91,6 +91,7 @@ Extra:
 			
 			var startedMusic = false;
 			var explosionsEnabled = true;
+			var isDebug = false;
 		
 			function FrameUpdate()
 			{				
@@ -455,7 +456,7 @@ Extra:
 					//this.collisionRadius = 5;
 
 					this.sideLength = 1.7;
-					this.heightSide = 2.3;
+					this.heightSide = 2.1;
 					this.leftX = -this.sideLength;
 					this.rightX = this.sideLength;
 					this.bottomY = -this.heightSide;
@@ -714,7 +715,7 @@ Extra:
 
 					//zero explosion speed once camera hits a solid
 					//don't let collisions below stop launch speed
-					if( collision != undefined || standingOnCrater) // && collision.TopY() > this.BottomY())
+					if( (collision != undefined && !(collision instanceof Tnt)) || standingOnCrater) // && collision.TopY() > this.BottomY())
 						this.launchVec = undefined;
 
 					if(collision instanceof MovingPlatform)
@@ -2287,7 +2288,7 @@ Extra:
 					}
 					else
 					{
-						GPU.GetObjectOfType(Fade).level = 1;
+						GPU.GetObjectOfType(Fade).level = 2;
 					}
 					
 					GPU.GetObjectOfType(Fade).isFirstFade = true;
@@ -2442,14 +2443,14 @@ Extra:
 
 					console.log("parse vertices for sphereTree");
 					var result = ParseVertices(window.sphereTree, window.sphereTreeMtl);
-					var sphereTree = GPU.CreateObject(1, CustomObj, [-0.3, 0.19, -0.4], [0,0,0], [0.2,0.2,0.2], result, window.treeTexture, window.treeNormals);					
+					var sphereTree = GPU.CreateObject(1, CustomObj, [-0.3, 0.19, -0.4], [0,0,0], [0.2,0.2,0.2], result, window.treeTexture, window.treeNormals);		
 					sphereTree.SetParent(ground);
 					sphereTree.specularity = 100;
 										
-					// console.log("parse vertices for sun");	
+					// console.log("parse vertices for sun");
 					// var result = ParseVertices(window.sun, window.sunMtl);
 					// var sun = GPU.CreateObject(1, CustomObj, [0.9, 1, 1], [0,0,0], [1,1,1], result);
-					// sun.specularity = 100;					
+					// sun.specularity = 100;
 
 					console.log("parse vertices for cube");
 					var result = ParseVertices(window.cube, window.cubeMtl);
@@ -2475,6 +2476,7 @@ Extra:
 
 				async LoadLevel1()
 				{
+					isDebug = false;
 					this.SetAmbientLight(0.65);
 
 					var cam = this.GetObjectOfType(Camera);
@@ -2556,6 +2558,8 @@ Extra:
 
 				async LoadBoss()
 				{					
+					isDebug = false;
+
 					var result = ParseVertices(window.cube, window.cubeMtl);
 					var ground = GPU.CreateObject(1, Grass, [0,-25,0], [0,0,0], [50,20,100], result, window.grassTexture);
 					ground.specularity = 105;
@@ -2600,11 +2604,11 @@ Extra:
 					var leftTopSpikes = this.CreateObject(2, LowSpikes, [-4.5,15.5,15.5], [0,0,0], [0.8,0.8,1.1], result);
 					var rightTopSpikes = this.CreateObject(2, LowSpikes, [15,15.5,16], [0,math.PI,0], [0.8,0.8,1.2], result);
 					
-					var leftEdgeSpikes = this.CreateObject(2, LowSpikes, [-17.9,28.5,15.5], [0,0,0], [0.8,1.4,1.2], result);
-					var rightRightSpikes = this.CreateObject(2, LowSpikes, [28,28.5,15.5], [0,math.PI,0], [0.8,1.4,1.2], result);
+					var leftEdgeSpikes = this.CreateObject(2, LowSpikes, [-17.9,28.5,15.5], [0,0,0], [0.8,1.8,1.2], result);
+					var rightRightSpikes = this.CreateObject(2, LowSpikes, [28,28.5,15.5], [0,math.PI,0], [0.8,1.8,1.2], result);
 
 					var result = ParseVertices(window.tnt, window.tntMtl);
-					var tnt = this.CreateObject(1, Tnt, [5, 25, 15], [0,0,0], [2,2,2], result, window.tntTexture);
+					var tnt = this.CreateObject(1, Tnt, [5, 32, 15], [0,0,0], [2,2,2], result, window.tntTexture);
 					tnt.isCreeperTnt = true;										
 										
 					var result = ParseVertices(window.tnt, window.tntMtl);
