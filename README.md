@@ -1,8 +1,8 @@
 # Explosive Maneuvers
 ## Project Background
 "Explosive Manuevers" is a game I developed with WebGPU in a team with one other member.
-It was created as the final project of our Advanced Computer Graphics course.
-The game was also presented at the Spring 2025 Florida Poly Game Expo.
+It was created as the final project of the Advanced Computer Graphics course.
+The game was also presented at the Fall 2025 Florida Poly Game Expo.
 The goal of the project was to research WebGPU particle systems, specifically smoke and fire. Raymarching was used for both of these. 
 Due to the drop in performance from smoke raymarching, only fire is used in the main game, but both fire and smoke are present in the debug level.
 
