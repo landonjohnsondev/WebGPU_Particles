@@ -31,8 +31,6 @@ Click the green code button, download the ZIP, and extract the folder. Then open
 ## Assets Used
 - Credits for the music and sfx are listed near the top of the index file.
 - Golem Model: https://sketchfab.com/3d-models/golem-e3557e08535c46c0a54deea8dbd3d8dc
-- Tnt Model: 
 - Grass Texture: https://opengameart.org/content/tiny-texture-pack-grass-17-128x128png
 - Wood Texture: https://opengameart.org/content/tiny-texture-pack-wood-18-256x256png
-- Metal Texture:
 - Heart PNG: https://en.wikipedia.org/wiki/Heart_symbol
