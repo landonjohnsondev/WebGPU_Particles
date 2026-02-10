@@ -14,13 +14,13 @@ Click the green code button, download the ZIP, and extract the folder. Then open
 - AD - Turn left/right
 - WS - Move forward/backward
 - Space - Jump
+- Mouse is only required for the title screen
 
 #### Controller:
 - South Button: Jump
 - East Button: Interact
 - Analog/dpad left/right: Turn left/right
 - Analog/dpad up/down: Move forward/backward
-Mouse is only required for the title screen.
 
 ## Credits
 - Landon Johnson - Created the fire, programmed player controls, programmed tnt explosions and crater movement, and created both levels
