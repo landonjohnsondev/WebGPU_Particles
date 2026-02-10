@@ -25,8 +25,10 @@ Click the green code button, download the ZIP, and extract the folder. Then open
 - South Button: Jump
 
 ## Credits
-- Landon Johnson - Created both levels, created the fire, created the spike model, created the main menu, programmed player controls, programmed tnt explosions and crater movement,
+- Landon Johnson - Created both levels, created the fire, created the spike, wall, and floor models, created the main menu, programmed player controls, programmed tnt explosions and crater movement,
 - Jasmine Rodriguez - Created the smoke, created the sign model, implemented tnt interacting, implemented randomized flame positions, created the debug scene, and playtested the levels.
 - Credits for the music and sfx are listed near the top of the index file.
 - Golem Model: https://sketchfab.com/3d-models/golem-e3557e08535c46c0a54deea8dbd3d8dc
 - Tnt Model: 
+- Grass Texture:
+- Metal Texture: 
