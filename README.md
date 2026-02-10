@@ -13,16 +13,19 @@ Click the green code button, download the ZIP, and extract the folder. Then open
 #### Keyboard:
 - AD - Turn left/right
 - WS - Move forward/backward
+- E - Interact
 - Space - Jump
-- Mouse is only required for the title screen
+Mouse is only required for the title screen
 
 #### Controller:
-- South Button: Jump
-- East Button: Interact
 - Analog/dpad left/right: Turn left/right
 - Analog/dpad up/down: Move forward/backward
+- East Button: Interact
+- South Button: Jump
 
 ## Credits
-- Landon Johnson - Created the fire, programmed player controls, programmed tnt explosions and crater movement, and created both levels
-- Jasmine Rodriguez - Created the smoke, implemented sign interactions, randomized flame positions,  and playtested the levels.
+- Landon Johnson - Created both levels, created the fire, created the spike model, created the main menu, programmed player controls, programmed tnt explosions and crater movement,
+- Jasmine Rodriguez - Created the smoke, created the sign model, implemented tnt interacting, implemented randomized flame positions, created the debug scene, and playtested the levels.
 - Credits for the music and sfx are listed near the top of the index file.
+- Golem Model:
+- Tnt Model: 
