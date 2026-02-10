@@ -11,15 +11,15 @@ Click the green code button, download the ZIP, and extract the folder. Then open
 
 ### Controls
 #### Keyboard:
-AD - Turn left/right
-WS - Move forward/backward
-Space - Jump
+- AD - Turn left/right
+- WS - Move forward/backward
+- Space - Jump
 
 #### Controller:
-South Button: Jump
-East Button: Interact
-Analog/dpad left/right: Turn left/right
-Analog/dpad up/down: Move forward/backward
+- South Button: Jump
+- East Button: Interact
+- Analog/dpad left/right: Turn left/right
+- Analog/dpad up/down: Move forward/backward
 Mouse is only required for the title screen.
 
 ## Credits
