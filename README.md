@@ -9,7 +9,7 @@ Due to the drop in performance from smoke raymarching, only fire is used in the 
 ## How to Play the Game
 Click the green code button, download the ZIP, and extract the folder. Then open the index file in the extracted folder to start the game. Use F11 to enter full screen.
 
-### Controls
+## Controls
 #### Keyboard:
 - AD - Turn left/right
 - WS - Move forward/backward
