@@ -5,7 +5,7 @@ It was created as the final project of the Advanced Computer Graphics course.
 The game was also presented at the Fall 2025 Florida Poly Game Expo.
 The goal of the project was to research WebGPU particle systems, specifically smoke and fire, which were both implemented with raymarching.
 Due to the drop in performance from smoke raymarching, only fire is used in the main game, but both fire and smoke are present in the debug level.
-The scope of the game was expanded to also included two levels, including a boss level, in addition to the particles.
+The scope of the game was expanded to also include two levels, including a boss level, in addition to the particles.
 
 ## How to Play the Game
 Click the green code button, download the ZIP, and extract the folder. Then open the index file in the extracted folder to start the game. Use F11 to enter full screen.
