@@ -11,14 +11,14 @@ The scope of the game was expanded to also include two levels, including a boss 
 Click the green code button, download the ZIP, and extract the folder. Then open the index file in the extracted folder to start the game. Use F11 to enter full screen.
 
 ## Controls
-#### Keyboard:
+#### Keyboard
 - AD - Turn left/right
 - WS - Move forward/backward
 - E - Interact
 - Space - Jump
 - Mouse is only required for the title screen
 
-#### Controller:
+#### Controller
 - Analog/dpad left/right: Turn left/right
 - Analog/dpad up/down: Move forward/backward
 - East Button: Interact
