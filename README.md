@@ -15,7 +15,7 @@ Click the green code button, download the ZIP, and extract the folder. Then open
 - WS - Move forward/backward
 - E - Interact
 - Space - Jump
-Mouse is only required for the title screen
+- Mouse is only required for the title screen
 
 #### Controller:
 - Analog/dpad left/right: Turn left/right
